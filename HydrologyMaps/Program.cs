@@ -14,9 +14,9 @@ public class Program
 
         HydrologyMapGen hydrologyMapGen = new HydrologyMapGen();
 
-        for (int i = 0; i < 1000; i++)
+        for (int i = 0; i < 1; i++)
         {
-            var map = hydrologyMapGen.GenerateIsland(width, height);
+            var map = hydrologyMapGen.GenerateIsland(width, height, 341179573);
 
             hydrologyMapGen.SaveMapAsPNG(map, ".heightmap.png");
             Thread.Sleep(1500);
