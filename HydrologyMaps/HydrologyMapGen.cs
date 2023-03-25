@@ -16,11 +16,15 @@ public class HydrologyMapGen
     }
 
 
-    public HydrologyMap GenerateIsland(int width, int height, int seed)
+    public HydrologyMap GenerateIsland(int width, int height, int seed, int k)
     {
-        if (seed == -1) seed = Random.Next();
+        if (seed == -1)
+        {
+            seed = Random.Next();
+            Console.WriteLine("Seed: " + seed);
+        }
+
         Random = new Random(seed);
-        Console.WriteLine("Seed is " + seed);
 
         FastNoiseLite noiseGenerator = new FastNoiseLite();
         noiseGenerator.SetNoiseType(FastNoiseLite.NoiseType.OpenSimplex2);
@@ -55,24 +59,20 @@ public class HydrologyMapGen
 
         (List<DirectedNode> riverMouthCandidates, List<GraphNode> extraVoronoiPoints) =
             GetRiverMouthCandidates(heightmap, parameters.SpaceBetweenRiverMouthCandidates);
-
+        
         if (riverMouthCandidates.Count == 0)
         {
-            return new HydrologyMap(heightmap, riverMouthCandidates, new List<RiverEdge>(), new List<GraphEdge>());
+            return new HydrologyMap(heightmap, riverMouthCandidates, new List<RiverEdge>(), new List<GraphEdge>(), new List<IGraphNode>());
         }
-
-        List<DirectedNode>
-            allRiverNodes =
-                riverMouthCandidates.Select(x => x)
-                    .ToList(); // SelectRandomBorderCoordsAsDirectedNodes(borderCoords, 0.2, 0.5);
+        List<DirectedNode> allRiverNodes = riverMouthCandidates.Select(x => x).ToList(); 
+        
         Queue<DirectedNode> riverNodes = new Queue<DirectedNode>();
         riverMouthCandidates.ForEach(x => riverNodes.Enqueue(x));
 
         List<RiverEdge> riverEdges = new List<RiverEdge>();
-//
 
 
-        for (int i = 0; i < 1111; i++)
+        for (int i = 0; i < k; i++)
         {
             var node = riverNodes.Dequeue();
             List<DirectedNode> newRiverNodes =
@@ -94,13 +94,14 @@ public class HydrologyMapGen
         List<IGraphNode> allPointsForVoronoi = new List<IGraphNode>();
         allRiverNodes.ForEach(x => allPointsForVoronoi.Add(x));
         extraVoronoiPoints.ForEach(x => allPointsForVoronoi.Add(x));
+        
         List<GraphEdge> voronoiEdges = IslandVoronoi.GenerateVoronoiEdges(allPointsForVoronoi);
         voronoiEdges = IslandVoronoi.GenerateExtraEdges(riverMouthCandidates, voronoiEdges, heightmap);
         //   voronoiEdges = voronoiEdges.Where(x => Distance((int)x.x1, (int)x.x2, (int)x.y1, (int)x.y2) < 51.0).ToList();
         
         allRiverNodes.RemoveAll(x => x.Type == NodeType.Border);
         
-        return new HydrologyMap(heightmap, allRiverNodes, riverEdges, voronoiEdges);
+        return new HydrologyMap(heightmap, allRiverNodes, riverEdges, voronoiEdges, allPointsForVoronoi);
         //return new HydrologyMap(heightmap, borderCoords, new List<RiverEdge>(), new List<GraphEdge>());
     }
 
@@ -210,7 +211,6 @@ public class HydrologyMapGen
                         endIndex,
                         midTrailingPoint);
 
-                    trailingPoints.Clear();
                 }
 
                 //  var riverNodePoint = new Point(currentPoint.X - (int)oceanDirection.X*2, currentPoint.Y- (int)oceanDirection.Y*2);
@@ -218,6 +218,7 @@ public class HydrologyMapGen
                 oceanDirection /= oceanDirection.Length(); // normalize
                 borderCoordinates.Add(new DirectedNode(currentPoint, NodeType.Border, oceanDirection));
                 lastAddedNode = currentPoint;
+                trailingPoints.Clear();
             }
 
             skipCounter = (skipCounter + 1) % skipCount;
@@ -252,13 +253,15 @@ public class HydrologyMapGen
             int newMid2 = midIndex + (endIndex - midIndex) / 2;
             AddAdditionalNodesIfNeeded(concaveExtraNodes, convexExtraNodes, trailingPoints, startIndex, midIndex,
                 newMid1);
-            AddAdditionalNodesIfNeeded(concaveExtraNodes, convexExtraNodes, trailingPoints, midIndex, endIndex,
-                newMid2);
-
+            
             if (isLeft)
                 concaveExtraNodes.Add(new DirectedNode(midPoint, NodeType.Border, Vector2.One));
             else
                 convexExtraNodes.Add(new GraphNode(midPoint, NodeType.Border));
+            
+            AddAdditionalNodesIfNeeded(concaveExtraNodes, convexExtraNodes, trailingPoints, midIndex, endIndex,
+                newMid2);
+
         }
     }
 

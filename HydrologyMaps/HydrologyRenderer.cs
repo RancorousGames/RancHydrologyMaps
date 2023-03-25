@@ -5,7 +5,7 @@ namespace HydrologyMaps;
 
 public class HydrologyRenderer
 {
-    public void SaveMapAsPNG(HydrologyMap map, string outputPath)
+    public void SaveMapAsPNG(HydrologyMap map, string outputPath, bool renderVoronoi, bool renderExtraPoints)
     {
         var heightmap = map.HeightMap;
         int width = heightmap.GetLength(0);
@@ -23,33 +23,49 @@ public class HydrologyRenderer
                 }
             }
 
+            
+            if (renderVoronoi)
+            {
+                foreach (var edge in map.VoronoiEdges)
+                {
+                    DrawLineOnBitmap(bitmap, new Point((int)edge.X1, (int)edge.Y1),
+                        new Point((int)edge.X2, (int)edge.Y2),
+                        Color.Yellow, 1);
+
+                    //Thread.Sleep(500);
+                    //bitmap.Save(outputPath, ImageFormat.Png);
+                }
+            }
 
             foreach (var edge in map.RiverEdges)
             {
                 DrawLineOnBitmap(bitmap, edge.P1.Point, edge.P2.Point, Color.Blue, 1);
             }
 
-            foreach (var edge in map.VoronoiEdges)
+            if (renderExtraPoints)
             {
-                DrawLineOnBitmap(bitmap, new Point((int)edge.X1, (int)edge.Y1),
-                    new Point((int)edge.X2, (int)edge.Y2),
-                    Color.Yellow, 1);
+                foreach (var voronoiNode in map.VoronoiNodes)
+                {
+                    bitmap.SetPixel(voronoiNode.Point.X, voronoiNode.Point.Y, Color.Fuchsia);
+                }
             }
-
-
+            
             foreach (var riverMouth in map.AllRiverNodes)
             {
                 bitmap.SetPixel(riverMouth.X, riverMouth.Y, Color.Red);
                 if (riverMouth.Type == NodeType.Border)
-                bitmap.SetPixel(riverMouth.X + (int)(riverMouth.Direction.X*5), riverMouth.Y + (int)(riverMouth.Direction.Y*5), Color.Coral);
+                    bitmap.SetPixel(riverMouth.X + (int)(riverMouth.Direction.X*5), riverMouth.Y + (int)(riverMouth.Direction.Y*5), Color.Coral);
 
-               bitmap.SetPixel(riverMouth.X + 1, riverMouth.Y - 1, Color.Red);
-               bitmap.SetPixel(riverMouth.X + 1, riverMouth.Y + 1, Color.Red);
+                bitmap.SetPixel(riverMouth.X + 1, riverMouth.Y - 1, Color.Red);
+                bitmap.SetPixel(riverMouth.X + 1, riverMouth.Y + 1, Color.Red);
 
-               bitmap.SetPixel(riverMouth.X - 1, riverMouth.Y - 1, Color.Red);
+                bitmap.SetPixel(riverMouth.X - 1, riverMouth.Y - 1, Color.Red);
 
-               bitmap.SetPixel(riverMouth.X - 1, riverMouth.Y + 1, Color.Red);
+                bitmap.SetPixel(riverMouth.X - 1, riverMouth.Y + 1, Color.Red);
             }
+
+
+
 
 
             bitmap.Save(outputPath, ImageFormat.Png);

@@ -8,10 +8,7 @@ public class IslandVoronoi
     {
         var voroObject = new Voronoi(0.1);
 
-        //double[] xVal = riverNodes.Select(x => (double)x.X).ToArray();
-        //double[] yVal = riverNodes.Select(x => (double)x.Y).ToArray();
-
-        List<GraphEdge> voronoi = voroObject.GenerateVoronoi(riverNodes, 0, 512, 0, 512);
+        List<GraphEdge> voronoi = voroObject.GenerateVoronoi(riverNodes, 0, 511, 0, 511);
 
         return voronoi;
     }
@@ -20,25 +17,24 @@ public class IslandVoronoi
         float[,] heightMap)
     {
         // Step 1: Connect border nodes to form boundary edges
-        List<GraphEdge> boundaryEdges = new List<GraphEdge>();
+        List<GraphEdge> contourEdges = new List<GraphEdge>();
         for (int i = 0; i < borderNodes.Count; i++)
         {
             Point start = borderNodes[i].Point;
             Point end = borderNodes[(i + 1) % borderNodes.Count].Point;
-            boundaryEdges.Add(new GraphEdge(start.X, start.Y, end.X, end.Y));
+            contourEdges.Add(new GraphEdge(start.X, start.Y, end.X, end.Y));
         }
-
-        int k = 0;
-
-        var firstRiverNodeX = boundaryEdges[0].X1;
-        var firstRiverNodeY = boundaryEdges[0].Y1;
+        
+        var firstRiverNodeX = contourEdges[0].X1;
+        var firstRiverNodeY = contourEdges[0].Y1;
 
         // remove all voronoi edges that are entirely in the ocean
         voronoiEdges = voronoiEdges
-            .Where(e => heightMap[(int)e.X1, (int)e.Y1] > 0 || heightMap[(int)e.X2, (int)e.Y2] > 0).ToList();
-        List<GraphEdge> allEdges = new List<GraphEdge>(voronoiEdges);
+            .Where(e => heightMap[(int)e.X1, (int)e.Y1] > 0.15 || heightMap[(int)e.X2, (int)e.Y2] > 0.15).ToList();
 
-        foreach (GraphEdge boundaryEdge in boundaryEdges)
+        List<GraphEdge> internalEdges = new List<GraphEdge>(voronoiEdges);
+        List<GraphEdge> contourEdgesToAdd = new List<GraphEdge>();
+        foreach (GraphEdge boundaryEdge in contourEdges)
         {
             List<GraphEdge> newEdges = new List<GraphEdge>();
 
@@ -56,54 +52,64 @@ public class IslandVoronoi
                     var toStartSiteY = voronoiEdge.Y1 - boundaryEdge.Y1;
                     var crossProduct = (direction.X * toStartSiteY) - (toStartSiteX * direction.Y);
 
-
-                    if (crossProduct > 3)
+                    var e = voronoiEdge;
+                    if (crossProduct > 0)
                         // If the start of the island-border-crossing voronoi edge is to the left of our clockwise direction then add the half of it that uses... start?
-                        allEdges.Add(new GraphEdge(voronoiEdge.X1, voronoiEdge.Y1, intersection.X, intersection.Y));
-                    else
+                        internalEdges.Add(new GraphEdge(voronoiEdge.X1, voronoiEdge.Y1, intersection.X,
+                            intersection.Y));
+                    else if (crossProduct < 0)
                         // else add the other half 
-                        allEdges.Add(new GraphEdge(voronoiEdge.X2, voronoiEdge.Y2, intersection.X, intersection.Y));
+                        internalEdges.Add(new GraphEdge(voronoiEdge.X2, voronoiEdge.Y2, intersection.X,
+                            intersection.Y));
 
-                    // lets keep the oceanmouth to oceanmouth edge (split in two which might be important later, not sure)
-                    allEdges.Add(new GraphEdge(boundaryEdge.X1, boundaryEdge.Y1, intersection.X, intersection.Y));
-                    allEdges.Add(new GraphEdge(boundaryEdge.X2, boundaryEdge.Y2, intersection.X, intersection.Y));
+                    // lets keep the contouredges edge (split in two which might be important later, not sure)
+                    contourEdgesToAdd.Add(new GraphEdge(boundaryEdge.X1, boundaryEdge.Y1, intersection.X,
+                        intersection.Y));
+                    contourEdgesToAdd.Add(new GraphEdge(boundaryEdge.X2, boundaryEdge.Y2, intersection.X,
+                        intersection.Y));
 
                     // remove the full long edge now that we added the half
-                    allEdges.Remove(voronoiEdge);
-                    if (boundaryEdge.X2 == firstRiverNodeX && boundaryEdge.Y2 == firstRiverNodeY)
-                    {
-                        return allEdges;
-                    }
+                    internalEdges.Remove(voronoiEdge);
 
                     intersectionFound = true;
-                  //  break;
                 }
             }
+            
+            // ReSharper disable CompareOfFloatsByEqualityOperator
+            if (boundaryEdge.X2 == firstRiverNodeX && boundaryEdge.Y2 == firstRiverNodeY)
+            {
+                break;
+            }
+            // ReSharper restore CompareOfFloatsByEqualityOperator
 
             // If no intersection, lets connect the boundary edge anyway
-            if (!intersectionFound) allEdges.Add(boundaryEdge);
+            if (!intersectionFound) contourEdgesToAdd.Add(boundaryEdge);
         }
 
         // Step 5: Return set of filtered edges
-        return allEdges;
+
+        return FilterValidEdgesAndAdd(heightMap, internalEdges, contourEdges, contourEdgesToAdd);
     }
 
-    private static bool IsSiteConnectedToSite((double x, double y) site1, (double x, double y) site2,
-        List<GraphEdge> edges)
+    private static List<GraphEdge> FilterValidEdgesAndAdd(float[,] heightMap, List<GraphEdge> edgesToFilter,
+        List<GraphEdge> contourEdges, List<GraphEdge> edgesToAdd)
     {
-        // Check if there is an edge that connects the two sites
-        foreach (GraphEdge edge in edges)
+        List<GraphEdge> filteredEdges = new List<GraphEdge>(edgesToFilter.Count);
+
+        foreach (GraphEdge e in edgesToFilter)
         {
-            if ((edge.X1.Equals(site1.x) && edge.Y1.Equals(site1.y) && edge.X2.Equals(site2.x) &&
-                 edge.Y2.Equals(site2.y)) ||
-                (edge.X1.Equals(site2.x) && edge.Y1.Equals(site2.y) && edge.X2.Equals(site1.x) &&
-                 edge.Y2.Equals(site1.y)))
+            if (heightMap[(int)e.X1, (int)e.Y1] > 0 && heightMap[(int)e.X2, (int)e.Y2] > 0)
             {
-                return true;
+                filteredEdges.Add(e);
+            }
+            else if (contourEdges.Any(ce => ce.Intersection(e) != null))
+            {
+                filteredEdges.Add(e);
             }
         }
 
-        // If no connecting edge is found, return false
-        return false;
+        edgesToAdd.ForEach(e => filteredEdges.Add(e));
+
+        return filteredEdges;
     }
 }

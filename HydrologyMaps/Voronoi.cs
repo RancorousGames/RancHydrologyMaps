@@ -560,8 +560,12 @@ namespace Voronoi2
             return he;
         }
 
+
+        private int k = 0;
         private void PushGraphEdge(Site leftSite, Site rightSite, double x1, double y1, double x2, double y2)
         {
+            k++;
+            if (k == 263) return;
             GraphEdge newEdge = new GraphEdge(x1, y1, x2, y2, leftSite.SiteNumber,  rightSite.SiteNumber);
             allEdges.Add(newEdge);
         }
@@ -592,8 +596,8 @@ namespace Voronoi2
             // Define the borders of the region
             regionLeftborder = borderMinX;
             regionLowerBorder = borderMinY;
-            regionRightBorder = borderMaxX -1;
-            regionTopBorder = borderMaxY - 1;
+            regionRightBorder = borderMaxX;
+            regionTopBorder = borderMaxY;
 
             // Determine which site is on the left and which is on the right of the edge
             if (edge.A == 1.0 && edge.B >= 0.0)

@@ -335,16 +335,18 @@ public struct HydrologyParameters
 public class HydrologyMap
 {
     public HydrologyMap(float[,] heightMap, List<DirectedNode> allRiverNodes, List<RiverEdge> riverEdges,
-        List<GraphEdge> voronoiEdges)
+        List<GraphEdge> voronoiEdges, List<IGraphNode> voronoiNodes)
     {
         HeightMap = heightMap;
         RiverEdges = riverEdges;
         VoronoiEdges = voronoiEdges;
+        VoronoiNodes = voronoiNodes;
         AllRiverNodes = allRiverNodes;
     }
 
     public float[,] HeightMap { get; }
     public List<RiverEdge> RiverEdges { get; }
     public List<GraphEdge> VoronoiEdges { get; }
+    public List<IGraphNode> VoronoiNodes { get; }
     public List<DirectedNode> AllRiverNodes { get; }
 }
