@@ -2,128 +2,9 @@
 using System.Drawing.Imaging;
 using System.Numerics;
 using Voronoi2;
-using Point = System.Drawing.Point;
 
 namespace HydrologyMaps;
 
-public struct RiverEdge
-{
-    public RiverEdge(DirectedNode p1, DirectedNode p2)
-    {
-        P1 = p1;
-        P2 = p2;
-    }
-
-    public DirectedNode P2 { get; }
-
-    public DirectedNode P1 { get; }
-}
-
-public enum NodeType
-{
-    Default,
-    Border,
-    River,
-    RiverMouth
-}
-
-public interface IGraphNode
-{
-    Point Point { get; set; }
-    NodeType Type { get; set; }
-}
-
-public struct GraphNode : IGraphNode
-{
-    public int X
-    {
-        get => Point.X;
-        set => Point = new Point(value, Point.Y);
-    }
-
-    public int Y
-    {
-        get => Point.Y;
-        set => Point = new Point(Point.X, value);
-    }
-
-    public Point Point { get; set; }
-    public NodeType Type { get; set; }
-
-    public GraphNode(Point point, NodeType type)
-    {
-        Point = point;
-        Type = type;
-        Position = new double[] { point.X, point.Y };
-    }
-
-    public double[] Position { get; set; }
-}
-
-public struct DirectedNode : IGraphNode
-{
-    public int X
-    {
-        get => Point.X;
-        set => Point = new Point(value, Point.Y);
-    }
-
-    public int Y
-    {
-        get => Point.Y;
-        set => Point = new Point(Point.X, value);
-    }
-
-    public Point Point { get; set; }
-    public NodeType Type { get; set; }
-    public Vector2 Direction { get; set; }
-
-    public DirectedNode(Point point, NodeType type, Vector2 direction)
-    {
-        Point = point;
-        Type = type;
-        Direction = direction;
-        Position = new double[] { point.X, point.Y };
-    }
-
-    public double[] Position { get; set; }
-}
-
-enum RiverAction
-{
-    Continue,
-    SymmetricBranch,
-    AsymmetricBranch
-}
-
-struct HydrologyParameters
-{
-    public double ContinueProbability = 0.1;
-    public double SymmetricBranchProbability = 0.4;
-    public double AsymmetricBranchProbability = 0.5;
-    public int SpaceBetwenRiverMouthCandidates = 30;
-
-    public HydrologyParameters()
-    {
-    }
-}
-
-public class HydrologyMap
-{
-    public HydrologyMap(float[,] heightMap, List<DirectedNode> allRiverNodes, List<RiverEdge> riverEdges,
-        List<GraphEdge> voronoiEdges)
-    {
-        HeightMap = heightMap;
-        RiverEdges = riverEdges;
-        VoronoiEdges = voronoiEdges;
-        AllRiverNodes = allRiverNodes;
-    }
-
-    public float[,] HeightMap { get; }
-    public List<RiverEdge> RiverEdges { get; }
-    public List<GraphEdge> VoronoiEdges { get; }
-    public List<DirectedNode> AllRiverNodes { get; }
-}
 
 public class HydrologyMapGen
 {
@@ -131,9 +12,9 @@ public class HydrologyMapGen
     HydrologyParameters parameters = new HydrologyParameters();
 
 
-    public HydrologyMap GenerateIsland(int width, int height)
+    public HydrologyMap GenerateIsland(int width, int height, int seed)
     {
-        int seed = Random.Next();
+        if (seed == -1) seed = Random.Next();
         Random = new Random(seed);
         Console.WriteLine("Seed is " + seed);
 
@@ -168,14 +49,18 @@ public class HydrologyMapGen
             }
         }
 
-        List<DirectedNode> riverMouthCandidates = GetRiverMouthCandidates(heightmap, parameters.SpaceBetwenRiverMouthCandidates);
-        
+        List<DirectedNode> riverMouthCandidates =
+            GetRiverMouthCandidates(heightmap, parameters.SpaceBetwenRiverMouthCandidates);
+
         if (riverMouthCandidates.Count == 0)
         {
             return new HydrologyMap(heightmap, riverMouthCandidates, new List<RiverEdge>(), new List<GraphEdge>());
         }
 
-        List<DirectedNode> allRiverNodes = riverMouthCandidates.Select(x => x).ToList();// SelectRandomBorderCoordsAsDirectedNodes(borderCoords, 0.2, 0.5);
+        List<DirectedNode>
+            allRiverNodes =
+                riverMouthCandidates.Select(x => x)
+                    .ToList(); // SelectRandomBorderCoordsAsDirectedNodes(borderCoords, 0.2, 0.5);
         Queue<DirectedNode> riverNodes = new Queue<DirectedNode>();
         riverMouthCandidates.ForEach(x => riverNodes.Enqueue(x));
 
@@ -200,10 +85,10 @@ public class HydrologyMapGen
             if (riverNodes.Count == 0) break;
         }
 
-        var voronoiCellCenters = allRiverNodes.Concat();
 
-        var voronoiEdges = GenerateVoronoiEdges(allRiverNodes);
-     //   voronoiEdges = voronoiEdges.Where(x => Distance((int)x.x1, (int)x.x2, (int)x.y1, (int)x.y2) < 51.0).ToList();
+        List<GraphEdge> voronoiEdges = IslandVoronoi.GenerateVoronoiEdges(allRiverNodes);
+        voronoiEdges = IslandVoronoi.GenerateExtraEdges(riverMouthCandidates, voronoiEdges, heightmap);
+        //   voronoiEdges = voronoiEdges.Where(x => Distance((int)x.x1, (int)x.x2, (int)x.y1, (int)x.y2) < 51.0).ToList();
         return new HydrologyMap(heightmap, allRiverNodes, riverEdges, voronoiEdges);
         //return new HydrologyMap(heightmap, borderCoords, new List<RiverEdge>(), new List<GraphEdge>());
     }
@@ -218,7 +103,7 @@ public class HydrologyMapGen
         // Find a border point by doing a quick scan through the middle of the heightmap
         Point firstBorderPoint = new Point(-1, -1);
         for (int x = 0; x < width; x++)
-        {
+        { 
             if (heightmap[x, height / 2] > 0)
             {
                 firstBorderPoint = new Point(x, height / 2);
@@ -233,162 +118,76 @@ public class HydrologyMapGen
 
         // Crawl over boundary of shape to find border coordinates, adding every skipCount to a list as DirectedNode objects
         int skipCounter = 0;
-        Point prevPoint = new Point(-1, -1);
 
-        Point nextPoint = Point.Empty;
         Point currentPoint = firstBorderPoint;
+        Vector2 oceanDirection = new Vector2(-1, 0);
+        
+        var facing = new Point(0, -1); // up
+
+        int k = 0;
+        
         while (true)
         {
-            Point[] neighborOffsets =
+            /*
+                ↑ ▮   ▮▮         ▮
+                | ▮    ↰▮   ⮣▮   ⮣▮ 
+                1       2     3    4
+                If there's a wall ahead on the right and no wall blocking the path, move forward one cell (1).
+                If there's a wall ahead on the right and a wall blocking the path, add a point and turn left (2).
+                Otherwise add a point and turn right (3) (also covers 4)
+                Note that we do point math as if we are crawling in the wall, not on the space next to it
+                Also note that Y = 0 is the top
+             */
+
+            Point left = new Point(facing.Y, -facing.X);
+            Point right = -left;
+            k++;
+            Point prevPoint = currentPoint;
+            
+            if (Blocked(currentPoint + facing) && // wall in front of current wall segment
+                !Blocked(currentPoint + facing + left)) // no wall blocking ahead
             {
-                new(1, 0), new(0, 1), new(-1, 0), new(0, -1),
-                new(1, 1), new(-1, 1), new(1, -1), new(-1, -1)
-            };
-
-
-            foreach (Point offset in neighborOffsets)
-            {
-                Point candidate = new Point(currentPoint.X + offset.X, currentPoint.Y + offset.Y);
-
-                if (candidate != prevPoint && candidate != currentPoint && heightmap[candidate.X, candidate.Y] > 0)
-                {
-                    bool isBorderPoint = false;
-
-                    // Check if the candidate point has an ocean neighbor
-                    foreach (Point offset2 in neighborOffsets)
-                    {
-                        Point neighbor = new Point(candidate.X + offset2.X, candidate.Y + offset2.Y);
-
-                        if (neighbor.X >= 0 && neighbor.X < width && neighbor.Y >= 0 && neighbor.Y < height)
-                        {
-                            if (heightmap[neighbor.X, neighbor.Y] == 0)
-                            {
-                                isBorderPoint = true;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (isBorderPoint)
-                    {
-                        nextPoint = candidate;
-                        break;
-                    }
-                }
+                currentPoint += facing; // forward
+                oceanDirection = new Vector2(left.X, left.Y);
             }
-
-            if (nextPoint == firstBorderPoint) break; // Stop when we are back where we started
-
-            if (skipCounter == 0)
+            else if (Blocked(currentPoint + facing + left) && // wall blocking ahead
+                     Blocked(currentPoint + facing)) // wall in front of current wall segment
             {
-                Vector2 oceanDirection = Vector2.Zero;
-
-
-                // Calculate ocean direction except for the first node
-                if (borderCoordinates.Count > 0)
-                {
-                    oceanDirection = CalculateOceanDirection(prevPoint, currentPoint, nextPoint, heightmap);
-                }
-
-                borderCoordinates.Add(new DirectedNode(currentPoint, NodeType.Border, oceanDirection));
-            }
-
-
-            skipCounter = (skipCounter + 1) % skipCount;
-
-            // Move to the next border point
-
-            prevPoint = currentPoint;
-            currentPoint = nextPoint;
-        }
-
-        borderCoordinates.RemoveAt(borderCoordinates.Count - 1);
-
-        // Handle the ocean direction for the first and last border coordinates
-        if (borderCoordinates.Count > 1)
-        {
-            // Calculate ocean direction for the first coordinate
-            Vector2 firstPointDirection = CalculateOceanDirection(borderCoordinates[borderCoordinates.Count - 1].Point,
-                borderCoordinates[0].Point, borderCoordinates[1].Point, heightmap);
-            borderCoordinates[0] = new DirectedNode(borderCoordinates[0].Point, NodeType.Border, firstPointDirection);
-        }
-
-        // Return result list
-        return borderCoordinates;
-
-        Vector2 CalculateOceanDirection(Point prevBorderPoint, Point currentBorderPoint, Point nextBorderPoint,
-            float[,] heightmap)
-        {
-            float midX = (prevBorderPoint.X + nextBorderPoint.X) / 2f;
-            float midY = (prevBorderPoint.Y + nextBorderPoint.Y) / 2f;
-
-            float heightAtMidPoint = heightmap[(int)midX, (int)midY];
-
-            Vector2 oceanDirection;
-
-            if (heightAtMidPoint > 0)
-            {
-                oceanDirection = new Vector2(currentBorderPoint.X - midX, currentBorderPoint.Y - midY);
+                currentPoint += left; // turn left
+                Point leftBack = left - facing;
+                facing = left;
+                oceanDirection = new Vector2(leftBack.X, leftBack.Y);
             }
             else
             {
-                oceanDirection = new Vector2(midX - currentBorderPoint.X, midY - currentBorderPoint.Y);
+                currentPoint += right;
+                Point leftBack = left - facing;
+                facing = right;
+                oceanDirection = new Vector2(left.X, left.Y);
             }
 
-            return oceanDirection / oceanDirection.Length();
+            if (currentPoint == firstBorderPoint) break; // Stop when we are back where we started
+
+            if (skipCounter == 0)
+            {
+                var riverNodePoint = new Point(currentPoint.X - (int)oceanDirection.X*2, currentPoint.Y- (int)oceanDirection.Y*2);
+ 
+                oceanDirection /= oceanDirection.Length(); // normalize
+                borderCoordinates.Add(new DirectedNode(riverNodePoint, NodeType.Border, oceanDirection));
+            }
+
+            skipCounter = (skipCounter + 1) % skipCount;
+
+            bool Blocked(Point p) => heightmap[p.X, p.Y] > 0;
         }
+
+        borderCoordinates.RemoveAt(borderCoordinates.Count - 1);
+        
+        // Return result list
+        return borderCoordinates;
     }
-/*
 
-static List<Point> GetBorderCoordinates(float[,] heightmap, int skipCount)
-{
-int width = heightmap.GetLength(0);
-int height = heightmap.GetLength(1);
-List<Point> borderCoordinates = new List<Point>();
-
-int currentSkip = 0;
-
-for (int y = 0; y < height; y++)
-{
-for (int x = 0; x < width; x++)
-{
-if (heightmap[x, y] != 0)
-{
-   bool hasZeroNeighbor = false;
-
-   for (int dx = -1; dx <= 1; dx++)
-   {
-       for (int dy = -1; dy <= 1; dy++)
-       {
-           if (dx == 0 && dy == 0) continue;
-
-           int nx = x + dx;
-           int ny = y + dy;
-
-           if (nx >= 0 && nx < width && ny >= 0 && ny < height && heightmap[nx, ny] == 0)
-           {
-               hasZeroNeighbor = true;
-               break;
-           }
-       }
-
-       if (hasZeroNeighbor && currentSkip == 0)
-       {
-           borderCoordinates.Add(new Point(x, y));
-           break;
-       }
-
-       currentSkip++;
-       if (currentSkip == skipCount) currentSkip = 0;
-   }
-}
-}
-}
-
-return borderCoordinates;
-}*/
-
-// Calculate distance between two coordinates
+    // Calculate distance between two coordinates
     static double Distance(IGraphNode coord1, IGraphNode coord2)
     {
         int dx = coord1.Point.X - coord2.Point.X;
@@ -403,12 +202,12 @@ return borderCoordinates;
         return new Vector2(x, y);
     }
 
-  //static double Distance(int x1, int x2, int y1, int y2)
-  //{
-  //    int dx = x1 - x2;
-  //    int dy = y1 - y2;
-  //    return Math.Sqrt(dx * dx + dy * dy);
-  //}
+    //static double Distance(int x1, int x2, int y1, int y2)
+    //{
+    //    int dx = x1 - x2;
+    //    int dy = y1 - y2;
+    //    return Math.Sqrt(dx * dx + dy * dy);
+    //}
     static double Distance(Point p1, Point p2)
     {
         int dx = p1.X - p2.X;
@@ -559,17 +358,6 @@ return borderCoordinates;
         return edges;
     }*/
 
-    public static List<GraphEdge> GenerateVoronoiEdges(List<DirectedNode> riverNodes)
-    {
-        var voroObject = new Voronoi(0.1);
-
-        double[] xVal = riverNodes.Select(x => (double)x.X).ToArray();
-        double[] yVal = riverNodes.Select(x => (double)x.Y).ToArray();
-
-        List<GraphEdge> voronoi = voroObject.generateVoronoi(xVal, yVal, 0, 512, 0, 512);
-
-        return voronoi;
-    }
 
 /*
     public static List<RiverEdge> GenerateVoronoiEdges(List<DirectedNode> riverNodes)
@@ -660,24 +448,26 @@ return borderCoordinates;
                 DrawLineOnBitmap(bitmap, edge.P1.Point, edge.P2.Point, Color.Blue, 1);
             }
 
-               foreach (var edge in map.VoronoiEdges)
-               {
-                   DrawLineOnBitmap(bitmap, new Point((int)edge.x1, (int)edge.y1),
-                       new Point((int)edge.x2, (int)edge.y2),
-                       Color.Yellow, 1);
-               }
+            foreach (var edge in map.VoronoiEdges)
+            {
+                DrawLineOnBitmap(bitmap, new Point((int)edge.X1, (int)edge.Y1),
+                    new Point((int)edge.X2, (int)edge.Y2),
+                    Color.Yellow, 1);
+            }
 
 
             foreach (var riverMouth in map.AllRiverNodes)
             {
                 bitmap.SetPixel(riverMouth.X, riverMouth.Y, Color.Red);
+                if (riverMouth.Type == NodeType.Border)
+                bitmap.SetPixel(riverMouth.X + (int)(riverMouth.Direction.X*5), riverMouth.Y + (int)(riverMouth.Direction.Y*5), Color.Coral);
 
-                bitmap.SetPixel(riverMouth.X + 1, riverMouth.Y - 1, Color.Red);
-                bitmap.SetPixel(riverMouth.X + 1, riverMouth.Y + 1, Color.Red);
+               bitmap.SetPixel(riverMouth.X + 1, riverMouth.Y - 1, Color.Red);
+               bitmap.SetPixel(riverMouth.X + 1, riverMouth.Y + 1, Color.Red);
 
-                bitmap.SetPixel(riverMouth.X - 1, riverMouth.Y - 1, Color.Red);
+               bitmap.SetPixel(riverMouth.X - 1, riverMouth.Y - 1, Color.Red);
 
-                bitmap.SetPixel(riverMouth.X - 1, riverMouth.Y + 1, Color.Red);
+               bitmap.SetPixel(riverMouth.X - 1, riverMouth.Y + 1, Color.Red);
             }
 
 
