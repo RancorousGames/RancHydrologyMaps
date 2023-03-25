@@ -12,13 +12,17 @@ public class Program
         int width = 512;
         int height = 512;
 
-        HydrologyMapGen hydrologyMapGen = new HydrologyMapGen();
+        HydrologyParameters parameters = new HydrologyParameters();
+        parameters.SpaceBetweenRiverMouthCandidates = 110;
+        HydrologyMapGen hydrologyMapGen = new HydrologyMapGen(parameters);
+        HydrologyRenderer hydrologyMapRender = new HydrologyRenderer();
 
-        for (int i = 0; i < 1; i++)
+        int seed = 200756544; //1291693340;  // 341179573
+        for (int i = 0; i < (seed == -1 ? 100 : 1); i++)
         {
-            var map = hydrologyMapGen.GenerateIsland(width, height, 341179573);
+            var map = hydrologyMapGen.GenerateIsland(width, height, seed);
 
-            hydrologyMapGen.SaveMapAsPNG(map, ".heightmap.png");
+            hydrologyMapRender.SaveMapAsPNG(map, ".heightmap.png");
             Thread.Sleep(1500);
         }
     }

@@ -65,6 +65,135 @@ public class Point
     }
     
     public static Point Zero => new Point(0, 0);
+
+    public Point Abs()
+    {
+        return new Point(Math.Abs(X), Math.Abs(Y));
+    }
+    
+}
+
+public class Vector2D
+{
+    public double X { get; set; }
+    public double Y { get; set; }
+
+    public Vector2D(double x, double y)
+    {
+        X = x;
+        Y = y;
+    }
+
+    public Vector2D(Point point)
+    {
+        X = point.X;
+        Y = point.Y;
+    }
+    
+    public Point AsPoint()
+    {
+        return new Point((int)Math.Round(X), (int)Math.Round(Y));
+    }
+
+    public static Vector2D operator +(Vector2D v1, Vector2D v2)
+    {
+        return new Vector2D(v1.X + v2.X, v1.Y + v2.Y);
+    }
+
+    public static Vector2D operator -(Vector2D v1, Vector2D v2)
+    {
+        return new Vector2D(v1.X - v2.X, v1.Y - v2.Y);
+    }
+
+    public static Vector2D operator *(Vector2D v, double scalar)
+    {
+        return new Vector2D(v.X * scalar, v.Y * scalar);
+    }
+
+    public static Vector2D operator *(double scalar, Vector2D v)
+    {
+        return new Vector2D(v.X * scalar, v.Y * scalar);
+    }
+
+    public static Vector2D operator /(Vector2D v, double scalar)
+    {
+        if (scalar == 0)
+        {
+            throw new DivideByZeroException("Cannot divide vector by zero.");
+        }
+        return new Vector2D(v.X / scalar, v.Y / scalar);
+    }
+
+    public double Magnitude()
+    {
+        return Math.Sqrt(X * X + Y * Y);
+    }
+
+    public Vector2D Normalized()
+    {
+        double magnitude = Magnitude();
+        if (magnitude == 0)
+        {
+            return new Vector2D(0, 0);
+        }
+        return new Vector2D(X / magnitude, Y / magnitude);
+    }
+
+    public double Dot(Vector2D other)
+    {
+        return X * other.X + Y * other.Y;
+    }
+
+    public double Cross(Vector2D other)
+    {
+        return X * other.Y - Y * other.X;
+    }
+
+    public static (double distance, bool isLeft) DistanceBetweenPointAndLineSegment(Point start, Point end, Point point)
+    {
+        return DistanceBetweenPointAndLineSegment(new Vector2D(start), new Vector2D(end), new Vector2D(point));
+    }
+    
+    public static (double distance, bool isLeft) DistanceBetweenPointAndLineSegment(Vector2D start, Vector2D end, Vector2D point)
+    {
+        // Find the displacement vector of the line segment
+        Vector2D displacement = end - start;
+
+        // Find a vector from start to point
+        Vector2D startToPoint = point - start;
+
+        // Calculate the dot product of displacement vector and startToPoint vector
+        double dotProduct = displacement.Dot(startToPoint);
+
+        // Calculate the cross product of displacement vector and startToPoint vector
+        double crossProduct = displacement.Cross(startToPoint);
+
+        // Determine the position of the point relative to the vector
+        bool isLeft = crossProduct > 0;
+
+        // If the dot product is negative, the closest point is start
+        if (dotProduct < 0)
+        {
+            return (startToPoint.Magnitude(), isLeft);
+        }
+        // Calculate the square of the displacement vector's magnitude
+        double displacementSquared = displacement.Dot(displacement);
+
+        // If the dot product is greater than the displacement vector's magnitude squared, the closest point is end
+        if (dotProduct > displacementSquared)
+        {
+            return ((point - end).Magnitude(), isLeft);
+        }
+
+        // Calculate the projection of startToPoint onto the displacement vector
+        Vector2D projection = start + (displacement * (dotProduct / displacementSquared));
+
+        // Calculate the displacement vector from projection to point
+        Vector2D projectionToPoint = point - projection;
+
+        // Calculate and return the magnitude of the projectionToPoint vector and position
+        return (projectionToPoint.Magnitude(), isLeft);
+    }
 }
 
 public struct RiverEdge
@@ -78,6 +207,40 @@ public struct RiverEdge
     public DirectedNode P2 { get; }
 
     public DirectedNode P1 { get; }
+    
+    public static double DistanceBetweenPointAndLineSegment(Vector2D start, Vector2D end, Vector2D point)
+    {
+        // Find the displacement vector of the line segment
+        Vector2D displacement = end - start;
+
+        // Find a unit vector n that is perpendicular to the displacement vector
+        Vector2D n = new Vector2D(-displacement.Y, displacement.X).Normalized();
+
+        // Find a vector from start to point
+        Vector2D startToPoint = point - start;
+
+        // Calculate the dot product of displacement vector and startToPoint vector
+        double dotProduct = displacement.Dot(startToPoint);
+
+        // If the dot product is negative, the closest point is start, otherwise check if it's greater than the displacement vector
+        if (dotProduct < 0)
+        {
+            return startToPoint.Magnitude();
+        }
+        else if (dotProduct > displacement.Dot(displacement))
+        {
+            return (point - end).Magnitude();
+        }
+
+        // Calculate the projection of startToPoint onto the displacement vector
+        Vector2D projection = start + (displacement * (dotProduct / displacement.Dot(displacement)));
+
+        // Calculate the displacement vector from projection to point
+        Vector2D projectionToPoint = point - projection;
+
+        // Calculate and return the magnitude of the cross product of the projectionToPoint vector and the unit vector n
+        return Math.Abs(projectionToPoint.Cross(n)) / n.Magnitude();
+    }
 }
 
 public enum NodeType
@@ -94,7 +257,7 @@ public interface IGraphNode
     NodeType Type { get; set; }
 }
 
-public struct GraphNode : IGraphNode
+public class GraphNode : IGraphNode
 {
     public int X
     {
@@ -121,7 +284,7 @@ public struct GraphNode : IGraphNode
     public double[] Position { get; set; }
 }
 
-public struct DirectedNode : IGraphNode
+public class DirectedNode : IGraphNode
 {
     public int X
     {
@@ -157,13 +320,13 @@ enum RiverAction
     AsymmetricBranch
 }
 
-struct HydrologyParameters
+public struct HydrologyParameters
 {
     public double ContinueProbability = 0.1;
     public double SymmetricBranchProbability = 0.4;
     public double AsymmetricBranchProbability = 0.5;
-    public int SpaceBetwenRiverMouthCandidates = 25;
-
+    public int SpaceBetweenRiverMouthCandidates = 25;
+    
     public HydrologyParameters()
     {
     }
