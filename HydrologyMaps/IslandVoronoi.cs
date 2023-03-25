@@ -1,11 +1,10 @@
 ﻿namespace HydrologyMaps;
 
-using System.Numerics;
 using Voronoi2;
 
 public class IslandVoronoi
 {
-    public static List<GraphEdge> GenerateVoronoiEdges(List<DirectedNode> riverNodes)
+    public static List<GraphEdge> GenerateVoronoiEdges(List<IGraphNode> riverNodes)
     {
         var voroObject = new Voronoi(0.1);
 
@@ -33,13 +32,12 @@ public class IslandVoronoi
 
         var firstRiverNodeX = boundaryEdges[0].X1;
         var firstRiverNodeY = boundaryEdges[0].Y1;
-        
-        
+
         // remove all voronoi edges that are entirely in the ocean
         voronoiEdges = voronoiEdges
             .Where(e => heightMap[(int)e.X1, (int)e.Y1] > 0 || heightMap[(int)e.X2, (int)e.Y2] > 0).ToList();
         List<GraphEdge> allEdges = new List<GraphEdge>(voronoiEdges);
-        
+
         foreach (GraphEdge boundaryEdge in boundaryEdges)
         {
             List<GraphEdge> newEdges = new List<GraphEdge>();
@@ -47,17 +45,17 @@ public class IslandVoronoi
             bool intersectionFound = false;
             foreach (GraphEdge voronoiEdge in voronoiEdges)
             {
-                
-                
                 Voronoi2.Point? intersection = boundaryEdge.Intersection(voronoiEdge);
                 if (intersection != null)
                 {
                     // We have a voronoi edge that crosses our clockwise direction going from oceanmouth to oceanmouth, now cut it in half and pick the inland one to keep
-                    Vector2 direction = new Vector2((float)(boundaryEdge.X2 - boundaryEdge.X1),
-                        (float)(boundaryEdge.Y2 - boundaryEdge.Y1));
+                    Vector2D direction = new Vector2D(
+                        (boundaryEdge.X2 - boundaryEdge.X1),
+                        (boundaryEdge.Y2 - boundaryEdge.Y1));
                     var toStartSiteX = voronoiEdge.X1 - boundaryEdge.X1;
                     var toStartSiteY = voronoiEdge.Y1 - boundaryEdge.Y1;
                     var crossProduct = (direction.X * toStartSiteY) - (toStartSiteX * direction.Y);
+
 
                     if (crossProduct > 3)
                         // If the start of the island-border-crossing voronoi edge is to the left of our clockwise direction then add the half of it that uses... start?
@@ -78,11 +76,10 @@ public class IslandVoronoi
                     }
 
                     intersectionFound = true;
-                    break;
+                  //  break;
                 }
-
             }
-                
+
             // If no intersection, lets connect the boundary edge anyway
             if (!intersectionFound) allEdges.Add(boundaryEdge);
         }

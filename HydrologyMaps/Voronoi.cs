@@ -121,7 +121,7 @@ namespace Voronoi2
 		 * @param maxY The maximum Y of the bounding box around the voronoi
 		 * @return
 		 */
-        public List<GraphEdge> GenerateVoronoi(List<DirectedNode> graphNodes, double minX, double maxX, double minY,
+        public List<GraphEdge> GenerateVoronoi(List<IGraphNode> graphNodes, double minX, double maxX, double minY,
             double maxY)
         {
             Sort(graphNodes);
@@ -157,7 +157,7 @@ namespace Voronoi2
          * Private methods - implementation details
          ********************************************************/
 
-        private void Sort(List<DirectedNode> graphNodes)
+        private void Sort(List<IGraphNode> graphNodes)
         {
             sites = null;
             allEdges = new List<GraphEdge>();

@@ -5,11 +5,15 @@ using Voronoi2;
 
 namespace HydrologyMaps;
 
-
 public class HydrologyMapGen
 {
+    private readonly HydrologyParameters parameters;
     Random Random = new Random();
-    HydrologyParameters parameters = new HydrologyParameters();
+
+    public HydrologyMapGen(HydrologyParameters parameters)
+    {
+        this.parameters = parameters;
+    }
 
 
     public HydrologyMap GenerateIsland(int width, int height, int seed)
@@ -49,8 +53,8 @@ public class HydrologyMapGen
             }
         }
 
-        List<DirectedNode> riverMouthCandidates =
-            GetRiverMouthCandidates(heightmap, parameters.SpaceBetwenRiverMouthCandidates);
+        (List<DirectedNode> riverMouthCandidates, List<GraphNode> extraVoronoiPoints) =
+            GetRiverMouthCandidates(heightmap, parameters.SpaceBetweenRiverMouthCandidates);
 
         if (riverMouthCandidates.Count == 0)
         {
@@ -76,6 +80,7 @@ public class HydrologyMapGen
 //
             foreach (var newDirectedNode in newRiverNodes)
             {
+                node.Type = NodeType.RiverMouth;
                 riverNodes.Enqueue(newDirectedNode);
                 allRiverNodes.Add(newDirectedNode);
                 riverEdges.Add(new RiverEdge(node, newDirectedNode));
@@ -86,24 +91,32 @@ public class HydrologyMapGen
         }
 
 
-        List<GraphEdge> voronoiEdges = IslandVoronoi.GenerateVoronoiEdges(allRiverNodes);
+        List<IGraphNode> allPointsForVoronoi = new List<IGraphNode>();
+        allRiverNodes.ForEach(x => allPointsForVoronoi.Add(x));
+        extraVoronoiPoints.ForEach(x => allPointsForVoronoi.Add(x));
+        List<GraphEdge> voronoiEdges = IslandVoronoi.GenerateVoronoiEdges(allPointsForVoronoi);
         voronoiEdges = IslandVoronoi.GenerateExtraEdges(riverMouthCandidates, voronoiEdges, heightmap);
         //   voronoiEdges = voronoiEdges.Where(x => Distance((int)x.x1, (int)x.x2, (int)x.y1, (int)x.y2) < 51.0).ToList();
+        
+        allRiverNodes.RemoveAll(x => x.Type == NodeType.Border);
+        
         return new HydrologyMap(heightmap, allRiverNodes, riverEdges, voronoiEdges);
         //return new HydrologyMap(heightmap, borderCoords, new List<RiverEdge>(), new List<GraphEdge>());
     }
 
-    List<DirectedNode> GetRiverMouthCandidates(float[,] heightmap, int skipCount)
+    (List<DirectedNode> borderCoordinates, List<GraphNode> extraVoronoiPoints) GetRiverMouthCandidates(
+        float[,] heightmap, int skipCount, int maxConcaveness = 3)
     {
         // Initialize variables
         int width = heightmap.GetLength(0);
         int height = heightmap.GetLength(1);
         List<DirectedNode> borderCoordinates = new List<DirectedNode>();
+        List<GraphNode> extraVoronoiPoints = new List<GraphNode>();
 
         // Find a border point by doing a quick scan through the middle of the heightmap
         Point firstBorderPoint = new Point(-1, -1);
         for (int x = 0; x < width; x++)
-        { 
+        {
             if (heightmap[x, height / 2] > 0)
             {
                 firstBorderPoint = new Point(x, height / 2);
@@ -113,7 +126,7 @@ public class HydrologyMapGen
 
         if (firstBorderPoint.X == -1)
         {
-            return borderCoordinates; // Return an empty list if no border point is found
+            return (borderCoordinates, extraVoronoiPoints); // Return empty lists if no border point is found
         }
 
         // Crawl over boundary of shape to find border coordinates, adding every skipCount to a list as DirectedNode objects
@@ -121,11 +134,20 @@ public class HydrologyMapGen
 
         Point currentPoint = firstBorderPoint;
         Vector2 oceanDirection = new Vector2(-1, 0);
-        
+
         var facing = new Point(0, -1); // up
 
         int k = 0;
-        
+
+        int concaveness = 0; // negative value means we are turning left more and in a concave
+
+        Point lastAddedNode = Point.Zero;
+
+        // used for detecting concaves and adding additional nodes
+        int trailingPointCount = skipCount;
+        List<Point> trailingPoints = new List<Point>(trailingPointCount);
+
+
         while (true)
         {
             /*
@@ -135,45 +157,67 @@ public class HydrologyMapGen
                 If there's a wall ahead on the right and no wall blocking the path, move forward one cell (1).
                 If there's a wall ahead on the right and a wall blocking the path, add a point and turn left (2).
                 Otherwise add a point and turn right (3) (also covers 4)
-                Note that we do point math as if we are crawling in the wall, not on the space next to it
-                Also note that Y = 0 is the top
+                Note that Y = 0 is the top
+                Note that we do point math as if we are crawling in the wall, not on the space next to it is changed a bit
              */
 
             Point left = new Point(facing.Y, -facing.X);
             Point right = -left;
-            k++;
-            Point prevPoint = currentPoint;
-            
-            if (Blocked(currentPoint + facing) && // wall in front of current wall segment
-                !Blocked(currentPoint + facing + left)) // no wall blocking ahead
+
+            // if there is more land ahead
+            if (Blocked(currentPoint + facing))
             {
-                currentPoint += facing; // forward
-                oceanDirection = new Vector2(left.X, left.Y);
-            }
-            else if (Blocked(currentPoint + facing + left) && // wall blocking ahead
-                     Blocked(currentPoint + facing)) // wall in front of current wall segment
-            {
-                currentPoint += left; // turn left
-                Point leftBack = left - facing;
-                facing = left;
-                oceanDirection = new Vector2(leftBack.X, leftBack.Y);
+                if (Blocked(currentPoint + facing + left))
+                {
+                    // If there was also land on the left, then we turn left so stay on the coast
+                    currentPoint += left; // turn left
+                    Point leftBack = left - facing;
+                    facing = left;
+                    oceanDirection = new Vector2(leftBack.X, leftBack.Y);
+                    concaveness--;
+                }
+                else
+                {
+                    // No land on the left so we go forward and will stay on the coast
+                    currentPoint += facing; // forward
+                    oceanDirection = new Vector2(left.X, left.Y);
+                }
             }
             else
             {
+                // no land ahead, got to turn right
                 currentPoint += right;
-                Point leftBack = left - facing;
                 facing = right;
                 oceanDirection = new Vector2(left.X, left.Y);
+                concaveness++;
             }
+
+            trailingPoints.Add(currentPoint);
 
             if (currentPoint == firstBorderPoint) break; // Stop when we are back where we started
 
+
             if (skipCounter == 0)
             {
-                var riverNodePoint = new Point(currentPoint.X - (int)oceanDirection.X*2, currentPoint.Y- (int)oceanDirection.Y*2);
- 
+                // First we need to check if we want to add any additional additional nodes before current to cover concave shape
+                if (trailingPoints.Count >= trailingPointCount && borderCoordinates.Count > 0)
+                {
+                    // recursively add midway points while the midway point is in a significantly convex area
+                    int startIndex = 0;
+                    int endIndex = trailingPoints.Count - 1;
+                    int midTrailingPoint = endIndex / 2;
+                    AddAdditionalNodesIfNeeded(borderCoordinates, extraVoronoiPoints, trailingPoints, startIndex,
+                        endIndex,
+                        midTrailingPoint);
+
+                    trailingPoints.Clear();
+                }
+
+                //  var riverNodePoint = new Point(currentPoint.X - (int)oceanDirection.X*2, currentPoint.Y- (int)oceanDirection.Y*2);
+                concaveness = 0;
                 oceanDirection /= oceanDirection.Length(); // normalize
-                borderCoordinates.Add(new DirectedNode(riverNodePoint, NodeType.Border, oceanDirection));
+                borderCoordinates.Add(new DirectedNode(currentPoint, NodeType.Border, oceanDirection));
+                lastAddedNode = currentPoint;
             }
 
             skipCounter = (skipCounter + 1) % skipCount;
@@ -181,10 +225,41 @@ public class HydrologyMapGen
             bool Blocked(Point p) => heightmap[p.X, p.Y] > 0;
         }
 
-        borderCoordinates.RemoveAt(borderCoordinates.Count - 1);
-        
+
+        // recursively add midway points while the midway point is in a significantly convex area
+        int startIndexF = 0;
+        int endIndexF = trailingPoints.Count - 1;
+        int midIndexF = endIndexF / 2;
+        AddAdditionalNodesIfNeeded(borderCoordinates, extraVoronoiPoints, trailingPoints, startIndexF, endIndexF,
+            midIndexF);
+
         // Return result list
-        return borderCoordinates;
+        return (borderCoordinates, extraVoronoiPoints);
+    }
+
+    private void AddAdditionalNodesIfNeeded(List<DirectedNode> concaveExtraNodes, List<GraphNode> convexExtraNodes,
+        List<Point> trailingPoints,
+        int startIndex, int endIndex, int midIndex)
+    {
+        var midPoint = trailingPoints[midIndex];
+        var startPoint = trailingPoints[startIndex];
+        var endPoint = trailingPoints[endIndex];
+        (double dist, bool isLeft) = Vector2D.DistanceBetweenPointAndLineSegment(startPoint, endPoint, midPoint);
+
+        if (dist > 1)
+        {
+            int newMid1 = startIndex + (midIndex - startIndex) / 2;
+            int newMid2 = midIndex + (endIndex - midIndex) / 2;
+            AddAdditionalNodesIfNeeded(concaveExtraNodes, convexExtraNodes, trailingPoints, startIndex, midIndex,
+                newMid1);
+            AddAdditionalNodesIfNeeded(concaveExtraNodes, convexExtraNodes, trailingPoints, midIndex, endIndex,
+                newMid2);
+
+            if (isLeft)
+                concaveExtraNodes.Add(new DirectedNode(midPoint, NodeType.Border, Vector2.One));
+            else
+                convexExtraNodes.Add(new GraphNode(midPoint, NodeType.Border));
+        }
     }
 
     // Calculate distance between two coordinates
@@ -423,67 +498,4 @@ public class HydrologyMapGen
     {
         return riverNodes.OrderBy(rn => Math.Sqrt(Math.Pow(rn.X - coordinate.X, 2) + Math.Pow(rn.Y - coordinate.Y, 2))).First();
     }*/
-
-    public void SaveMapAsPNG(HydrologyMap map, string outputPath)
-    {
-        var heightmap = map.HeightMap;
-        int width = heightmap.GetLength(0);
-        int height = heightmap.GetLength(1);
-
-
-        using (Bitmap bitmap = new Bitmap(width, height))
-        {
-            for (int y = 0; y < height; y++)
-            {
-                for (int x = 0; x < width; x++)
-                {
-                    int grayValue = (int)(heightmap[x, y] * 255);
-                    bitmap.SetPixel(x, y, Color.FromArgb(grayValue, grayValue, grayValue));
-                }
-            }
-
-
-            foreach (var edge in map.RiverEdges)
-            {
-                DrawLineOnBitmap(bitmap, edge.P1.Point, edge.P2.Point, Color.Blue, 1);
-            }
-
-            foreach (var edge in map.VoronoiEdges)
-            {
-                DrawLineOnBitmap(bitmap, new Point((int)edge.X1, (int)edge.Y1),
-                    new Point((int)edge.X2, (int)edge.Y2),
-                    Color.Yellow, 1);
-            }
-
-
-            foreach (var riverMouth in map.AllRiverNodes)
-            {
-                bitmap.SetPixel(riverMouth.X, riverMouth.Y, Color.Red);
-                if (riverMouth.Type == NodeType.Border)
-                bitmap.SetPixel(riverMouth.X + (int)(riverMouth.Direction.X*5), riverMouth.Y + (int)(riverMouth.Direction.Y*5), Color.Coral);
-
-               bitmap.SetPixel(riverMouth.X + 1, riverMouth.Y - 1, Color.Red);
-               bitmap.SetPixel(riverMouth.X + 1, riverMouth.Y + 1, Color.Red);
-
-               bitmap.SetPixel(riverMouth.X - 1, riverMouth.Y - 1, Color.Red);
-
-               bitmap.SetPixel(riverMouth.X - 1, riverMouth.Y + 1, Color.Red);
-            }
-
-
-            bitmap.Save(outputPath, ImageFormat.Png);
-        }
-    }
-
-
-    static void DrawLineOnBitmap(Bitmap bitmap, Point coord1, Point coord2, Color lineColor, int lineWidth)
-    {
-        using (Graphics graphics = Graphics.FromImage(bitmap))
-        {
-            using (Pen pen = new Pen(lineColor, lineWidth))
-            {
-                graphics.DrawLine(pen, coord1.X, coord1.Y, coord2.X, coord2.Y);
-            }
-        }
-    }
 }
