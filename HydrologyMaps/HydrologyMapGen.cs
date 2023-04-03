@@ -1,6 +1,8 @@
 ﻿using System.Drawing;
 using System.Drawing.Imaging;
 using System.Numerics;
+using NetTopologySuite.Geometries;
+using NetTopologySuite.Index.KdTree;
 using Voronoi2;
 
 namespace HydrologyMaps;
@@ -9,6 +11,9 @@ public class HydrologyMapGen
 {
     private readonly HydrologyParameters parameters;
     Random Random = new Random();
+
+    public static List<IEdge> DebugGraphEdges1 = new();
+    public static List<IEdge> DebugGraphEdges2 = new();
 
     public HydrologyMapGen(HydrologyParameters parameters)
     {
@@ -37,76 +42,131 @@ public class HydrologyMapGen
         float centerX = width / 2f;
         float centerY = height / 2f;
 
+        int borderSize = 5;
+
+        float beachWidth = parameters.BeachWidth;
+
         for (int y = 0; y < height; y++)
         {
             for (int x = 0; x < width; x++)
             {
-                float distanceX = x - centerX;
-                float distanceY = y - centerY;
-                float distanceToCenter = (float)Math.Sqrt(distanceX * distanceX + distanceY * distanceY);
-
-                float radialGradient = 1f - Math.Min(1f, distanceToCenter / (Math.Min(width, height) / 2.5f));
+                float radialGradient = GetRadialGradient(x, y);
 
                 float perlinValue =
                     (noiseGenerator.GetNoise(x, y) + 1f) * radialGradient /
                     2f; // Normalize Perlin noise to the range [0, 1]
-                if (perlinValue < 0.15) perlinValue = 0;
-                else if (perlinValue < 0.2) perlinValue = 0.15f;
+
+                if (perlinValue < 0.2)
+                {
+                    if (perlinValue < 0.15)
+                    {
+                        perlinValue = 0;
+                    }
+                    else // if (x > beachWidth && x < width - beachWidth  && y > beachWidth && y < width - beachWidth)
+                    {
+                        bool isNearOcean = false;
+                        for (int yo = -(int)beachWidth; yo < beachWidth; yo++)
+                        {
+                            for (int xo = -(int)beachWidth; xo < beachWidth; xo++)
+                            {
+                                float offsetRadialGradient = GetRadialGradient(x + xo, y + yo);
+                                float offSetPerlinValue =
+                                    (noiseGenerator.GetNoise(x + xo, y + yo) + 1f) * offsetRadialGradient / 2f;
+
+                                if (offSetPerlinValue < 0.15)
+                                {
+                                    isNearOcean = true;
+                                    break;
+                                }
+                            }
+
+                            if (isNearOcean) break;
+                        }
+
+                        if (isNearOcean) perlinValue = 0.1f;
+                    }
+                }
+
+
+                //  else if (perlinValue < 0.165) perlinValue = 0.15f;
                 //else perlinValue = 0.5f;
                 heightmap[x, y] = perlinValue;
+            }
+
+            float GetRadialGradient(int x, int y)
+            {
+                float distanceX = x - centerX;
+                float distanceY = y - centerY;
+                float distanceToCenter = (float)Math.Sqrt(distanceX * distanceX + distanceY * distanceY);
+                return 1f - Math.Min(1f, distanceToCenter / (Math.Min(width, height) / 2.5f));
             }
         }
 
         (List<DirectedNode> riverMouthCandidates, List<GraphNode> extraVoronoiPoints) =
             GetRiverMouthCandidates(heightmap, parameters.SpaceBetweenRiverMouthCandidates);
-        
+
         if (riverMouthCandidates.Count == 0)
         {
-            return new HydrologyMap(heightmap, riverMouthCandidates, new List<RiverEdge>(), new List<GraphEdge>(), new List<IGraphNode>());
-        }
-        List<DirectedNode> allRiverNodes = riverMouthCandidates.Select(x => x).ToList(); 
-        
-        Queue<DirectedNode> riverNodes = new Queue<DirectedNode>();
-        riverMouthCandidates.ForEach(x => riverNodes.Enqueue(x));
-
-        List<RiverEdge> riverEdges = new List<RiverEdge>();
-
-
-        for (int i = 0; i < k; i++)
-        {
-            var node = riverNodes.Dequeue();
-            List<DirectedNode> newRiverNodes =
-                FindNewRiverNodes(heightmap, node, 20, 5, 0.2f, 3, allRiverNodes, 20);
-//
-            foreach (var newDirectedNode in newRiverNodes)
-            {
-                node.Type = NodeType.RiverMouth;
-                riverNodes.Enqueue(newDirectedNode);
-                allRiverNodes.Add(newDirectedNode);
-                riverEdges.Add(new RiverEdge(node, newDirectedNode));
-            }
-
-//
-            if (riverNodes.Count == 0) break;
+            return new HydrologyMap(heightmap, riverMouthCandidates, new List<RiverEdge>(), new GridCell[0, 0],
+                new List<GraphEdge>(),
+                new List<IGraphNode>());
         }
 
+        HydrologyKdTree2D hydrologyKdTree = new HydrologyKdTree2D();
+        (List<DirectedNode> allRiverNodes, List<RiverEdge> riverEdges) =
+            ExpandRiverGrid(heightmap, riverMouthCandidates, k);
+
+        GenerateRiverNodeHeights(riverMouthCandidates);
+
+        allRiverNodes.ForEach(n => hydrologyKdTree.Insert(n));
 
         List<IGraphNode> allPointsForVoronoi = new List<IGraphNode>();
         allRiverNodes.ForEach(x => allPointsForVoronoi.Add(x));
         extraVoronoiPoints.ForEach(x => allPointsForVoronoi.Add(x));
-        
+
         List<GraphEdge> voronoiEdges = IslandVoronoi.GenerateVoronoiEdges(allPointsForVoronoi);
         voronoiEdges = IslandVoronoi.GenerateExtraEdges(riverMouthCandidates, voronoiEdges, heightmap);
         //   voronoiEdges = voronoiEdges.Where(x => Distance((int)x.x1, (int)x.x2, (int)x.y1, (int)x.y2) < 51.0).ToList();
-        
+
         allRiverNodes.RemoveAll(x => x.Type == NodeType.Border);
-        
-        return new HydrologyMap(heightmap, allRiverNodes, riverEdges, voronoiEdges, allPointsForVoronoi);
-        //return new HydrologyMap(heightmap, borderCoords, new List<RiverEdge>(), new List<GraphEdge>());
+
+        GridCell[,] gridCells = new GridCell[width, height];
+
+
+        allRiverNodes.ForEach(x => hydrologyKdTree.Insert(x));
+
+
+        InterpolateHeightMap(heightmap, hydrologyKdTree, allRiverNodes.Select(x => (GraphNode)x).ToList(), width,
+            height, 5, 5f);
+
+
+        // flowrate = 0.42 · A^0.69
+        allRiverNodes.ForEach(n => n.FlowRate = 0.42 * Math.Pow(n.FlowRate, 0.69));
+
+
+        return new HydrologyMap(heightmap, allRiverNodes, riverEdges, gridCells, voronoiEdges, allPointsForVoronoi);
     }
 
+    private void GenerateRiverNodeHeights(List<DirectedNode> riverMouthCandidates)
+    {
+        riverMouthCandidates.ForEach(n => GenerateRiverNodeHeightsRecursive(n, 0));
+        
+        void GenerateRiverNodeHeightsRecursive(GraphNode node, float height)
+        {
+            node.Height = height;
+            if (node.Children.Count > 0)
+            {
+                float newHeight = Math.Min(1, height + 0.1f * (float)Random.NextDouble());
+                node.Children.ForEach(
+                    n => GenerateRiverNodeHeightsRecursive(n, newHeight));
+            }
+        }
+    }
+    
+    
+
     (List<DirectedNode> borderCoordinates, List<GraphNode> extraVoronoiPoints) GetRiverMouthCandidates(
-        float[,] heightmap, int skipCount, int maxConcaveness = 3)
+        float[,] heightmap, int skipCount)
     {
         // Initialize variables
         int width = heightmap.GetLength(0);
@@ -209,14 +269,14 @@ public class HydrologyMapGen
                     int midTrailingPoint = endIndex / 2;
                     AddAdditionalNodesIfNeeded(borderCoordinates, extraVoronoiPoints, trailingPoints, startIndex,
                         endIndex,
-                        midTrailingPoint);
-
+                        midTrailingPoint, parameters.MaxNodePriority);
                 }
 
                 //  var riverNodePoint = new Point(currentPoint.X - (int)oceanDirection.X*2, currentPoint.Y- (int)oceanDirection.Y*2);
                 concaveness = 0;
                 oceanDirection /= oceanDirection.Length(); // normalize
-                borderCoordinates.Add(new DirectedNode(currentPoint, NodeType.Border, oceanDirection));
+                borderCoordinates.Add(new DirectedNode(currentPoint, NodeType.Border, null, oceanDirection,
+                    Random.Next(parameters.MaxNodePriority, parameters.MaxNodePriority)));
                 lastAddedNode = currentPoint;
                 trailingPoints.Clear();
             }
@@ -232,15 +292,111 @@ public class HydrologyMapGen
         int endIndexF = trailingPoints.Count - 1;
         int midIndexF = endIndexF / 2;
         AddAdditionalNodesIfNeeded(borderCoordinates, extraVoronoiPoints, trailingPoints, startIndexF, endIndexF,
-            midIndexF);
+            midIndexF, Random.Next(2, parameters.MaxNodePriority));
 
         // Return result list
         return (borderCoordinates, extraVoronoiPoints);
     }
 
+
+    public static void InterpolateHeightMap(float[,] heightmap, HydrologyKdTree2D kdTree, List<GraphNode> allNodes,
+        int width, int height, int numNeighbors, float maxSlope)
+    {
+        // Iterate through the grid points
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                if (heightmap[x, y] == 0) continue;
+                
+                // Query k-d tree for k nearest neighbors
+                List<GraphNode> nearestNeighbors = kdTree.FindClosest(x, y, numNeighbors);
+
+                // Calculate the interpolated height using IDW or other methods
+                float interpolatedHeight = 0;
+                double totalWeight = 0;
+                foreach (var neighbor in nearestNeighbors)
+                {
+                    double distance = Distance(new Point(x, y), neighbor.Point);
+                    if (distance == 0) distance = 1;
+                    
+                    double weight = 1 / distance; // You can raise this to a power to control smoothness
+                    
+                    if (double.IsNaN(weight) || double.IsNaN(neighbor.Height))
+                    {
+                        Console.WriteLine("HEA");
+                    }
+                    
+                    totalWeight += weight;
+                    interpolatedHeight += (float)weight * neighbor.Height;
+                    
+                    if (double.IsNaN(interpolatedHeight))
+                    {
+                        Console.WriteLine("HEA");
+                    }
+                }
+
+                if (double.IsNaN(interpolatedHeight))
+                {
+                    Console.WriteLine("HEA");
+                }
+                interpolatedHeight = (float)(interpolatedHeight / totalWeight);
+
+                // Adjust the interpolated height based on the closest node and maxSlope if needed
+                // ...
+
+                heightmap[x, y] = interpolatedHeight;
+            }
+        }
+
+        // Second pass: adjust the height values based on the maxSlope constraint
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                float currentHeight = heightmap[x, y];
+
+                if (currentHeight == 0) continue;
+
+                // Iterate through the 8 neighboring pixels
+                for (int dy = -1; dy <= 1; dy++)
+                {
+                    for (int dx = -1; dx <= 1; dx++)
+                    {
+                        if (dx == 0 && dy == 0) continue;
+
+                        int nx = x + dx;
+                        int ny = y + dy;
+
+                        // Check if the neighboring pixel is within the bounds of the heightmap
+                        if (nx >= 0 && nx < width && ny >= 0 && ny < height)
+                        {
+                            float neighborHeight = heightmap[nx, ny];
+                            float heightDifference = Math.Abs(currentHeight - neighborHeight);
+
+                            // Check if the height difference exceeds the maxSlope constraint
+                            if (heightDifference > maxSlope)
+                            {
+                                float adjustedHeightDifference = maxSlope * (heightDifference / maxSlope);
+                                if (currentHeight > neighborHeight)
+                                {
+                                    heightmap[nx, ny] = currentHeight - adjustedHeightDifference;
+                                }
+                                else
+                                {
+                                    heightmap[x, y] = neighborHeight - adjustedHeightDifference;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private void AddAdditionalNodesIfNeeded(List<DirectedNode> concaveExtraNodes, List<GraphNode> convexExtraNodes,
         List<Point> trailingPoints,
-        int startIndex, int endIndex, int midIndex)
+        int startIndex, int endIndex, int midIndex, int newNodePriority)
     {
         var midPoint = trailingPoints[midIndex];
         var startPoint = trailingPoints[startIndex];
@@ -252,17 +408,52 @@ public class HydrologyMapGen
             int newMid1 = startIndex + (midIndex - startIndex) / 2;
             int newMid2 = midIndex + (endIndex - midIndex) / 2;
             AddAdditionalNodesIfNeeded(concaveExtraNodes, convexExtraNodes, trailingPoints, startIndex, midIndex,
-                newMid1);
-            
-            if (isLeft)
-                concaveExtraNodes.Add(new DirectedNode(midPoint, NodeType.Border, Vector2.One));
-            else
-                convexExtraNodes.Add(new GraphNode(midPoint, NodeType.Border));
-            
-            AddAdditionalNodesIfNeeded(concaveExtraNodes, convexExtraNodes, trailingPoints, midIndex, endIndex,
-                newMid2);
+                newMid1, newNodePriority);
 
+            if (isLeft)
+                concaveExtraNodes.Add(new DirectedNode(midPoint, NodeType.Border, null, Vector2.One, newNodePriority));
+            else
+                convexExtraNodes.Add(new GraphNode(midPoint, NodeType.Border, null));
+
+            AddAdditionalNodesIfNeeded(concaveExtraNodes, convexExtraNodes, trailingPoints, midIndex, endIndex,
+                newMid2, newNodePriority);
         }
+    }
+
+    private (List<DirectedNode>, List<RiverEdge>) ExpandRiverGrid(
+        float[,] heightmap,
+        List<DirectedNode> riverMouthCandidates, int k)
+    {
+        List<DirectedNode> riverGrid = new List<DirectedNode>();
+        List<RiverEdge> riverEdges = new List<RiverEdge>();
+
+        PriorityQueue<DirectedNode, int> riverExpandQueue = new();
+        //Queue<DirectedNode> riverNodes = new Queue<DirectedNode>();
+        riverMouthCandidates.ForEach(n =>
+        {
+            riverExpandQueue.Enqueue(n, parameters.MaxNodePriority - n.Priority);
+            riverGrid.Add(n);
+        });
+
+        for (int i = 0; i < k; i++)
+        {
+            var node = riverExpandQueue.Dequeue();
+            List<DirectedNode> newRiverNodes =
+                ContinueRiver(heightmap, node, riverGrid, riverEdges);
+
+            foreach (var newDirectedNode in newRiverNodes)
+            {
+                node.Type = NodeType.River;
+                riverExpandQueue.Enqueue(newDirectedNode, parameters.MaxNodePriority - newDirectedNode.Priority);
+                riverGrid.Add(newDirectedNode);
+                riverEdges.Add(new RiverEdge(node, newDirectedNode, newDirectedNode.Priority));
+            }
+
+
+            if (riverExpandQueue.Count == 0) break;
+        }
+
+        return (riverGrid, riverEdges);
     }
 
     // Calculate distance between two coordinates
@@ -351,53 +542,155 @@ public class HydrologyMapGen
 // In the Main() method or wherever you
 
 
-    List<DirectedNode> FindNewRiverNodes(float[,] heightmap, DirectedNode drainNode, double distance,
-        double variance,
-        float minHeight, int maxTries, List<DirectedNode> riverNodes, float minDistToOtherNodes)
+    List<DirectedNode> ContinueRiver(float[,] heightmap, DirectedNode drainNode,
+        List<DirectedNode> riverNodes, List<RiverEdge> riverEdgesSoFar)
     {
+        var newNodes = new List<DirectedNode>();
+
         int width = heightmap.GetLength(0);
         int height = heightmap.GetLength(1);
 
+        Vector2 directionVector = drainNode.Direction;
+        directionVector /= directionVector.Length();
+
+        int branch1Priority = drainNode.Priority;
+        int branch2Priority = 0;
 
         RiverAction action;
         var nextActionSelector = Random.NextDouble();
         if (drainNode.Type == NodeType.Border || drainNode.Type == NodeType.RiverMouth ||
-            nextActionSelector < parameters.ContinueProbability)
+            nextActionSelector < parameters.ContinueProbability ||
+            drainNode.Priority == 1)
         {
             action = RiverAction.Continue;
         }
         else if (nextActionSelector < parameters.ContinueProbability + parameters.AsymmetricBranchProbability)
         {
             action = RiverAction.AsymmetricBranch;
+            branch2Priority = Random.Next(1, drainNode.Priority - 1);
         }
         else
         {
             action = RiverAction.SymmetricBranch;
+            branch1Priority = drainNode.Priority - 1;
+            branch2Priority = drainNode.Priority - 1;
         }
 
-        int x, y;
+
         double currentHeight = heightmap[drainNode.X, drainNode.Y];
 
 
-        var newNodes = new List<DirectedNode>();
+        //    double randomDistance1 = distance + Random.NextDouble() * variance * 2 - variance;
+        //    double angle1 = Random.NextDouble() * 2 * Math.PI;
+        //    
+        //    if (action == RiverAction.Continue)
+        //    {
+        //        
+        //    }
+        //    else
+        //    {
+        //        double randomDistance2 = distance + Random.NextDouble() * variance * 2 - variance;
+        //        double angle1 = Random.NextDouble() * 2 * Math.PI;
+        //    }
 
-        for (int i = 0; i < maxTries; i++)
+        double randomDistance1 = parameters.InterNodeDist + Random.NextDouble() * parameters.InterNodeDistVar * 2 -
+                                 parameters.InterNodeDistVar;
+
+
+        double angleBetweenBranches = RandomInRange(Random, parameters.MinAngleBetweenBranches, 170);
+
+        double angle1 = action == RiverAction.Continue
+            ? RandomInRange(Random, -90, 90)
+            : RandomInRange(Random, -90, Math.Min(0, 90 - angleBetweenBranches));
+        double angle1Rad = angle1 * (Math.PI / 180);
+
+        Point newPoint = new(
+            drainNode.X + (int)(directionVector.X * randomDistance1 * Math.Cos(angle1Rad) -
+                                directionVector.Y * randomDistance1 * Math.Sin(angle1Rad)),
+            drainNode.Y + (int)(directionVector.X * randomDistance1 * Math.Sin(angle1Rad) +
+                                directionVector.Y * randomDistance1 * Math.Cos(angle1Rad)));
+
+
+        for (int i = 0; i < parameters.NodeExpansionMaxTries; i++)
         {
-            double randomDistance = distance + Random.NextDouble() * variance * 2 - variance;
-            double angle = Random.NextDouble() * 2 * Math.PI;
+            if (ValidateNewPoint(newPoint, riverEdgesSoFar))
+            {
+                newNodes.Add(new DirectedNode(newPoint, NodeType.River, drainNode,
+                    GetVectorFromPoints(newPoint, drainNode.Point), Math.Max(1, branch1Priority)));
+                break;
+            }
 
-            x = (int)Math.Round(drainNode.X + randomDistance * Math.Cos(angle));
-            y = (int)Math.Round(drainNode.Y + randomDistance * Math.Sin(angle));
-            var checkingPoint = new Point(x, y);
-            if (x >= 0 && x < width && y >= 0 && y < height && heightmap[x, y] >= minHeight &&
-                heightmap[x, y] > currentHeight)
+            randomDistance1 = parameters.InterNodeDist + Random.NextDouble() * parameters.InterNodeDistVar * 2 -
+                              parameters.InterNodeDistVar;
+            angle1 = drainNode.Type == NodeType.Border ? Random.NextDouble() * 360 : Random.NextDouble() * -90;
+            angle1Rad = angle1 * (Math.PI / 180);
+            directionVector = drainNode.Direction;
+            directionVector /= directionVector.Length();
+            newPoint = new(
+                drainNode.X + (int)(directionVector.X * randomDistance1 * Math.Cos(angle1Rad) -
+                                    directionVector.Y * randomDistance1 * Math.Sin(angle1Rad)),
+                drainNode.Y + (int)(directionVector.X * randomDistance1 * Math.Sin(angle1Rad) +
+                                    directionVector.Y * randomDistance1 * Math.Cos(angle1Rad)));
+        }
+
+
+        if (action != RiverAction.Continue)
+        {
+            double randomDistance2 = parameters.InterNodeDist + Random.NextDouble() * parameters.InterNodeDistVar * 2 -
+                                     parameters.InterNodeDistVar;
+
+
+            // var minAngle2 = angle1 + parameters.MinAngleBetweenBranches;
+
+
+            for (int i = 0; i < parameters.NodeExpansionMaxTries * 3; i++)
+            {
+                double angle2Rad = (angle1 + angleBetweenBranches) * (Math.PI / 180);
+
+                newPoint = new(
+                    drainNode.X + (int)(directionVector.X * randomDistance2 * Math.Cos(angle2Rad) -
+                                        directionVector.Y * randomDistance2 * Math.Sin(angle2Rad)),
+                    drainNode.Y + (int)(directionVector.X * randomDistance2 * Math.Sin(angle2Rad) +
+                                        directionVector.Y * randomDistance2 * Math.Cos(angle2Rad)));
+
+                if (ValidateNewPoint(newPoint, riverEdgesSoFar))
+                {
+                    newNodes.Add(new DirectedNode(newPoint, NodeType.River, drainNode,
+                        GetVectorFromPoints(newPoint, drainNode.Point), branch2Priority));
+                    break;
+                }
+
+                randomDistance2 = parameters.InterNodeDist + Random.NextDouble() * parameters.InterNodeDistVar * 2 -
+                                  parameters.InterNodeDistVar;
+
+                angleBetweenBranches = RandomInRange(Random, parameters.MinAngleBetweenBranches, 90);
+            }
+        }
+
+        return newNodes;
+
+        double RandomInRange(Random random, double min, double max)
+        {
+            var result = random.NextDouble() * (max - min) + min;
+            return result;
+        }
+
+
+        bool ValidateNewPoint(Point p, List<RiverEdge> edgesSoFar)
+        {
+            bool valid = false;
+            var x = p.X;
+            var y = p.Y;
+            if (x >= 0 && x < width && y >= 0 && heightmap[x, y] >= parameters.NodeExpansionMinHeight &&
+                y < height /* && 
+                heightmap[x, y] >= currentHeight*/)
             {
                 bool isTooClose = false;
                 foreach (DirectedNode riverNode in riverNodes)
                 {
                     if (riverNode.Equals(drainNode)) continue;
 
-                    if (Distance(checkingPoint, riverNode.Point) < minDistToOtherNodes)
+                    if (Distance(p, riverNode.Point) < parameters.MinDistanceBetweenRiverNodes)
                     {
                         isTooClose = true;
                         break;
@@ -406,18 +699,26 @@ public class HydrologyMapGen
 
                 if (!isTooClose)
                 {
-                    newNodes.Add(new DirectedNode(checkingPoint, NodeType.River,
-                        GetVectorFromPoints(checkingPoint, drainNode.Point)));
-                    if (newNodes.Count > 2 && action != RiverAction.Continue
-                        || action == RiverAction.Continue)
-                    {
-                        return newNodes;
-                    }
+                    valid = true;
                 }
             }
-        }
 
-        return newNodes;
+            // finally check we dont cross other river edges
+            if (valid)
+            {
+                var candidateEdge = new GraphEdge(p.X, p.Y, drainNode.X, drainNode.Y);
+                RiverEdge? collide = edgesSoFar.FirstOrDefault(e =>
+                    e.P2 != drainNode && new GraphEdge(e.P1.X, e.P1.Y, e.P2.X, e.P2.Y).Intersection(candidateEdge) !=
+                    null);
+
+                valid = edgesSoFar.All(e =>
+                    e.P2 == drainNode ||
+                    new GraphEdge(e.P1.X, e.P1.Y, e.P2.X, e.P2.Y).Intersection(new GraphEdge(p.X, p.Y, drainNode.X,
+                        drainNode.Y)) == null);
+            }
+
+            return valid;
+        }
     }
 
 /*

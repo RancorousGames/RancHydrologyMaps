@@ -43,12 +43,12 @@ public class Point
     {
         return new Point(-point.X, -point.Y);
     }
-    
+
     public static bool operator !=(Point a, Point b)
     {
         return !(a == b);
     }
-    
+
     public override bool Equals(object obj)
     {
         if (obj is Point other)
@@ -63,7 +63,7 @@ public class Point
     {
         return X ^ Y;
     }
-    
+
     public static Point Zero => new Point(0, 0);
 
     public Point Abs()
@@ -71,6 +71,11 @@ public class Point
         return new Point(Math.Abs(X), Math.Abs(Y));
     }
     
+    
+    public override string ToString()
+    {
+        return $"{X},{Y}";
+    }
 }
 
 public class Vector2D
@@ -89,7 +94,7 @@ public class Vector2D
         X = point.X;
         Y = point.Y;
     }
-    
+
     public Point AsPoint()
     {
         return new Point((int)Math.Round(X), (int)Math.Round(Y));
@@ -121,6 +126,7 @@ public class Vector2D
         {
             throw new DivideByZeroException("Cannot divide vector by zero.");
         }
+
         return new Vector2D(v.X / scalar, v.Y / scalar);
     }
 
@@ -136,6 +142,7 @@ public class Vector2D
         {
             return new Vector2D(0, 0);
         }
+
         return new Vector2D(X / magnitude, Y / magnitude);
     }
 
@@ -153,8 +160,9 @@ public class Vector2D
     {
         return DistanceBetweenPointAndLineSegment(new Vector2D(start), new Vector2D(end), new Vector2D(point));
     }
-    
-    public static (double distance, bool isLeft) DistanceBetweenPointAndLineSegment(Vector2D start, Vector2D end, Vector2D point)
+
+    public static (double distance, bool isLeft) DistanceBetweenPointAndLineSegment(Vector2D start, Vector2D end,
+        Vector2D point)
     {
         // Find the displacement vector of the line segment
         Vector2D displacement = end - start;
@@ -176,6 +184,7 @@ public class Vector2D
         {
             return (startToPoint.Magnitude(), isLeft);
         }
+
         // Calculate the square of the displacement vector's magnitude
         double displacementSquared = displacement.Dot(displacement);
 
@@ -196,18 +205,39 @@ public class Vector2D
     }
 }
 
-public struct RiverEdge
+public interface IEdge
 {
-    public RiverEdge(DirectedNode p1, DirectedNode p2)
+    double X1 {get;}
+    double X2 {get;}
+    double Y1 {get;}
+    double Y2 {get;}
+}
+
+public class RiverEdge : IEdge
+{
+    public double X1 => P1.X;
+    public double X2 => P2.X;
+    public double Y1 => P1.Y;
+    public double Y2 => P2.Y;
+    
+    
+    public RiverEdge(DirectedNode p1, DirectedNode p2, float flowRate)
     {
         P1 = p1;
         P2 = p2;
+        FlowRate = flowRate;
     }
 
     public DirectedNode P2 { get; }
 
     public DirectedNode P1 { get; }
+
+    public float FlowRate { get; }
     
+    public override string ToString()
+    {
+        return $"RiverEdge {{ P1 = {P1}, P2 = {P2}, FlowRate = {FlowRate} }}";
+    }
     public static double DistanceBetweenPointAndLineSegment(Vector2D start, Vector2D end, Vector2D point)
     {
         // Find the displacement vector of the line segment
@@ -273,44 +303,45 @@ public class GraphNode : IGraphNode
 
     public Point Point { get; set; }
     public NodeType Type { get; set; }
+    public GraphNode? Parent { get; }
 
-    public GraphNode(Point point, NodeType type)
+    public List<GraphNode> Children { get; } = new List<GraphNode>(2);
+    
+    public GraphNode(Point point, NodeType type, GraphNode? parent = null)
     {
         Point = point;
         Type = type;
+        Parent = parent;
         Position = new double[] { point.X, point.Y };
+        parent?.Children.Add(this);
+
     }
 
     public double[] Position { get; set; }
+    public float Height { get; set; }
 }
 
-public class DirectedNode : IGraphNode
+public class DirectedNode : GraphNode
 {
-    public int X
-    {
-        get => Point.X;
-        set => Point = new Point(value, Point.Y);
-    }
-
-    public int Y
-    {
-        get => Point.Y;
-        set => Point = new Point(Point.X, value);
-    }
-
-    public Point Point { get; set; }
-    public NodeType Type { get; set; }
     public Vector2 Direction { get; set; }
+    public int Priority { get; }
 
-    public DirectedNode(Point point, NodeType type, Vector2 direction)
+    public double FlowRate { get; set; } = 0;
+
+    public DirectedNode(Point point, NodeType type, GraphNode? parent, Vector2 direction, int priority)
+        : base(point, type, parent)
     {
         Point = point;
         Type = type;
         Direction = direction;
+        this.Priority = priority;
         Position = new double[] { point.X, point.Y };
     }
-
-    public double[] Position { get; set; }
+    
+    public override string ToString()
+    {
+        return $"{{ Pos: {Point} Dir: {Direction}, Prio {Priority} }}";
+    }
 }
 
 enum RiverAction
@@ -322,23 +353,41 @@ enum RiverAction
 
 public struct HydrologyParameters
 {
-    public double ContinueProbability = 0.1;
-    public double SymmetricBranchProbability = 0.4;
-    public double AsymmetricBranchProbability = 0.5;
+    public double ContinueProbability = 0.15;
+    public double SymmetricBranchProbability = 0.42;
+    public double AsymmetricBranchProbability = 0.43;
     public int SpaceBetweenRiverMouthCandidates = 25;
+    public int MaxNodePriority = 10;
+    public float MinDistanceBetweenRiverNodes = 20;
+    public double InterNodeDist = 11;
+    public double InterNodeDistVar = 4;
+    public int NodeExpansionMaxTries = 3;
+    public float NodeExpansionMinHeight = 0.101f;
+    public double MinAngleBetweenBranches = 60;
+    public float BeachWidth = 5;
+    
     
     public HydrologyParameters()
     {
     }
+
+}
+
+public struct GridCell
+{
+    public DirectedNode NearestNode;
+    public double DistToNode;
 }
 
 public class HydrologyMap
 {
     public HydrologyMap(float[,] heightMap, List<DirectedNode> allRiverNodes, List<RiverEdge> riverEdges,
+        GridCell[,] gridCells,
         List<GraphEdge> voronoiEdges, List<IGraphNode> voronoiNodes)
     {
         HeightMap = heightMap;
         RiverEdges = riverEdges;
+        GridCells = gridCells;
         VoronoiEdges = voronoiEdges;
         VoronoiNodes = voronoiNodes;
         AllRiverNodes = allRiverNodes;
@@ -346,6 +395,7 @@ public class HydrologyMap
 
     public float[,] HeightMap { get; }
     public List<RiverEdge> RiverEdges { get; }
+    public GridCell[,] GridCells { get; }
     public List<GraphEdge> VoronoiEdges { get; }
     public List<IGraphNode> VoronoiNodes { get; }
     public List<DirectedNode> AllRiverNodes { get; }

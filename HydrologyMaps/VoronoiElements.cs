@@ -53,6 +53,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using HydrologyMaps;
 
 namespace Voronoi2
 {
@@ -211,7 +212,7 @@ namespace Voronoi2
 		}
 	}
 
-	public class GraphEdge
+	public class GraphEdge : IEdge
 	{
 		public GraphEdge(double x1, double y1, double x2, double y2)
 		{
