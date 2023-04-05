@@ -24,14 +24,13 @@ public static class Program
         HydrologyMapGen hydrologyMapGen = new HydrologyMapGen(parameters);
         HydrologyRenderer hydrologyMapRender = new HydrologyRenderer();
 
-        int seed = 5; // 326765686; //120087508 441937323;// 200756544; //1291693340;  // 341179573
-        //    for (int i = 0; i < 100; i++)// (seed == -1 ? 100 : 1); i++)
+        int seed = 1;
         bool stepByStep = false;
         for (int i = 0; i < (seed == -1 || stepByStep ? 200 : 1); i++)
         {
             var map = hydrologyMapGen.GenerateIsland(width, height, seed, (stepByStep ? i : 300));
 
-            hydrologyMapRender.SaveMapAsPNG(map, "./heightmap.png", false, true,  false, parameters);
+            hydrologyMapRender.SaveMapAsPNG(map, "./heightmap.png", false, true,  false, finalHeightmapRender: true, parameters);
 
             // open heightmap
             var ps =  Process.GetProcesses();
