@@ -4,32 +4,102 @@ namespace HydrologyMaps;
 
 public class HydrologyTerrainFormer
 {
+    private static FastNoiseLite _noiseGenerator = new();
+
+    public HydrologyTerrainFormer()
+    {
+        _noiseGenerator.SetNoiseType(FastNoiseLite.NoiseType.Perlin);
+        _noiseGenerator.SetFrequency(0.003f);
+        _noiseGenerator.SetFractalGain(0);
+    }
+
     public static void CarveRivers(float[,] heightMap, List<DirectedNode> riverRoots, float riverDepth,
-        float baseRiverWidth, float falloffFactor, Random random)
+        float baseRiverWidth, float riverWidthFlowInfluence, float falloffFactor, Random random)
     {
         foreach (var root in riverRoots)
         {
-            CarveRiverDFS(heightMap, root, riverDepth, baseRiverWidth, falloffFactor, random);
+            CarveRiverDFS(heightMap, root, riverDepth, baseRiverWidth, riverWidthFlowInfluence, falloffFactor,  random);
         }
     }
 
-    private static void CarveRiverDFS(float[,] heightMap, DirectedNode currentNode, float riverDepth,
-        float baseRiverWidth, float falloffFactor, Random random)
+
+    private static void CarveRiverDFS(float[,] heightMap, DirectedNode currentNode, float riverDepth, float baseRiverWidth, float riverWidthFlowInfluence, float falloffFactor, Random random)
     {
         if (currentNode.Children.Count == 0) return;
 
         foreach (var childGraphNode in currentNode.Children)
         {
             var childNode = (DirectedNode)childGraphNode;
-            double parentFlowRate = currentNode.FlowRate / 25;
-            double childFlowRate = childNode.FlowRate / 25;
-            float parentWidth = baseRiverWidth * (float)Math.Pow(parentFlowRate, 0.3);
-            float childWidth = baseRiverWidth * (float)Math.Pow(childFlowRate, 0.3);
 
-            CarveRiverSegment(heightMap, currentNode.Point, childNode.Point, riverDepth, parentWidth, childWidth,
-                falloffFactor, random);
-            CarveRiverDFS(heightMap, (DirectedNode)childNode, riverDepth, baseRiverWidth, falloffFactor, random);
+            // Generate a smoothed path with random twists and turns
+            List<Point> smoothedPath = GenerateSmoothedPath(currentNode.Point, childNode.Point, random);
+
+            for (int i = 0; i < smoothedPath.Count - 1; i++)
+            {
+                Point start = smoothedPath[i];
+                Point end = smoothedPath[i + 1];
+
+                double startFlowRate = currentNode.FlowRate / 25;
+                double endFlowRate = childNode.FlowRate / 25;
+
+                float startWidth = Lerp(baseRiverWidth, baseRiverWidth * (float)Math.Pow(startFlowRate, riverWidthFlowInfluence), riverWidthFlowInfluence);
+                float endWidth = Lerp(baseRiverWidth, baseRiverWidth * (float)Math.Pow(endFlowRate, riverWidthFlowInfluence), riverWidthFlowInfluence);
+
+                float depth = Lerp((float)(riverDepth ), (float)(riverDepth), (float)i / (smoothedPath.Count - 1));
+                
+                CarveRiverSegment(heightMap, start, end, depth, startWidth, endWidth, falloffFactor, random);
+            }
+
+            CarveRiverDFS(heightMap, childNode, riverDepth, baseRiverWidth, riverWidthFlowInfluence, falloffFactor, random);
         }
+    }
+
+    private static List<Point> GenerateSmoothedPath(Point start, Point end, Random random)
+    {
+        List<Point> path = new List<Point> { start, end };
+        List<Point> smoothedPath = new List<Point>();
+
+        Vector2 direction = (end - start).ToVector();
+        direction /= direction.Length();
+
+        // Add random control points to the path for twists and turns
+        int numControlPoints = random.Next(1, 4);
+        for (int i = 0; i < numControlPoints; i++)
+        {
+            float t = (float)i / (numControlPoints + 1);
+            Point controlPoint = Point.Lerp(start, end, t);
+
+            // Create a random angle based on the current direction (between -45 and 45 degrees)
+            float angle = random.Next(-90, 90) * (float)Math.PI / 180f;
+
+            // Calculate the new direction with the random angle applied
+            Vector2 newDirection = new Vector2(
+                direction.X * (float)Math.Cos(angle) - direction.Y * (float)Math.Sin(angle),
+                direction.X * (float)Math.Sin(angle) + direction.Y * (float)Math.Cos(angle)
+            );
+
+            // Calculate the random offset using the new direction
+            Vector2 randomOffset = newDirection * random.Next(1, 5);
+
+            controlPoint += Point.FromVector(randomOffset);
+            path.Insert(1 + i, controlPoint);
+        }
+
+        // Smooth the path using Catmull-Rom splines
+        for (float t = 0; t < path.Count - 1; t += 0.5f)
+        {
+            int index = (int)Math.Floor(t);
+            Point p0 = path[Math.Clamp(index - 1, 0, path.Count - 1)];
+            Point p1 = path[index];
+            Point p2 = path[index + 1];
+            Point p3 = path[Math.Clamp(index + 2, 0, path.Count - 1)];
+
+            Vector2 point = CatmullRomSpline(p0.ToVector(), p1.ToVector(), p2.ToVector(), p3.ToVector(), t - index);
+            smoothedPath.Add(Point.FromVector(point));
+        }
+
+        smoothedPath.Add(path[^1]);
+        return smoothedPath;
     }
 
     private static void CarveRiverSegment(float[,] heightMap, Point start, Point end, float depth, float startWidth,
@@ -51,9 +121,9 @@ public class HydrologyTerrainFormer
             float baseWidth = Lerp(startWidth, endWidth, t);
 
             // Apply Perlin noise to the river width
-            float perlinSeed = random.Next(10000);
-            float perlinValue = 0.1f; // (float)PerlinNoise.GetValue(position.X / 100f + perlinSeed, position.Y / 100f + perlinSeed, 0);
-            float currentWidth = baseWidth * (0.8f + 0.2f * perlinValue);
+            _noiseGenerator.SetSeed(random.Next(10000));
+            float perlinValue = 2 * Math.Abs(_noiseGenerator.GetNoise(position.X / 1f, position.Y / 1f, 0));
+            float currentWidth = baseWidth * (0.7f + 0.3f * perlinValue);
 
             // Update the heightMap value by subtracting the depth and considering the width
             for (int offsetX = -((int)currentWidth); offsetX <= (int)currentWidth; offsetX++)
@@ -68,7 +138,7 @@ public class HydrologyTerrainFormer
                     if (distance <= currentWidth)
                     {
                         // Calculate depth falloff using the falloffFactor
-                        float depthFalloff = 1- (float)Math.Pow(distance / currentWidth, falloffFactor);
+                        float depthFalloff = 1 - (float)Math.Pow(distance / currentWidth, falloffFactor);
                         float currentDepth = depth * depthFalloff;
 
                         heightMap[nx, ny] = Math.Max(heightMap[nx, ny] - currentDepth, 0);
@@ -77,80 +147,7 @@ public class HydrologyTerrainFormer
             }
         }
     }
-
-
-    /*
-    // Carve rivers with smoothed paths, width variation, and curvature
-    public static void CarveRivers(float[,] heightMap, List<DirectedNode> riverRoots, float riverDepth,
-        float falloff, float smoothness, float minWidth, float maxWidth)
-    {
-        if (smoothness <= 0) smoothness = 0.1f;
-
-        foreach (var root in riverRoots)
-        {
-            CarveRiverDFS(heightMap, root, riverDepth, falloff, smoothness, minWidth, maxWidth);
-        }
-    }
-
-    private static void CarveRiverDFS(float[,] heightMap, DirectedNode currentNode, float riverDepth,
-        float falloff, float smoothness, float minWidth, float maxWidth)
-    {
-        if (currentNode.Children.Count == 0) return;
-
-        foreach (var childNode in currentNode.Children)
-        {
-            List<DirectedNode> fullPath = BuildFullPath(currentNode);
-            List<Point> smoothedPath = SmoothRiverPath(fullPath, smoothness);
-
-            double avgFlowRate = Lerp(currentNode.FlowRate, ((DirectedNode)childNode).FlowRate, 0.5f);
-
-            for (int i = 0; i < smoothedPath.Count - 1; i++)
-            {
-                Point start = smoothedPath[i];
-                Point end = smoothedPath[i + 1];
-
-                double depth = riverDepth * avgFlowRate;
-                double width = Lerp(minWidth, maxWidth, avgFlowRate);
-
-                CarveRiverSegment(heightMap, start, end, (float)depth, (float)width, falloff);
-            }
-
-            // Recursively carve the river segments of child nodes
-            CarveRiverDFS(heightMap, (DirectedNode)childNode, riverDepth, falloff, smoothness, minWidth, maxWidth);
-        }
-    }
-
-    private static List<DirectedNode> BuildFullPath(DirectedNode currentNode)
-    {
-        List<DirectedNode> fullPath = new List<DirectedNode> { currentNode };
-
-        DirectedNode parentNode = (DirectedNode)currentNode.Parent;
-        while (parentNode != null)
-        {
-            fullPath.Insert(0, parentNode);
-            parentNode = (DirectedNode)parentNode.Parent;
-        }
-
-        return fullPath;
-    }
-
-    // Smooth the river path using Catmull-Rom splines
-    private static List<Point> SmoothRiverPath(List<DirectedNode> path, float smoothness)
-    {
-        List<Point> smoothedPath = new List<Point>();
-        for (float t = 0; t < path.Count - 1; t += smoothness)
-        {
-            int index = (int)Math.Floor(t);
-            Vector2 point = CatmullRomSpline(path[index].PositionVector, path[index + 1].PositionVector,
-                path[Math.Clamp(index + 2, 0, path.Count - 1)].PositionVector,
-                path[Math.Clamp(index - 1, 0, path.Count - 1)].PositionVector, t - index);
-            smoothedPath.Add(new Point((int)point.X, (int)point.Y));
-        }
-
-        smoothedPath.Add(path[^1].Point);
-        return smoothedPath;
-    }
-
+    
     // Calculate the Catmull-Rom spline for a set of control points and a parameter t
     private static Vector2 CatmullRomSpline(Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, float t)
     {
@@ -163,43 +160,6 @@ public class HydrologyTerrainFormer
         return 0.5f * (a + (b * t) + (c * t * t) + (d * t * t * t));
     }
 
-    // Carve a river segment between start and end points, using depth, width, and falloff
-    private static void CarveRiverSegment(float[,] heightMap, Point start, Point end, float depth,
-        float width, float falloff)
-    {
-        Point dirPoint = (end - start);
-        Vector2 direction = new Vector2(dirPoint.X, dirPoint.Y);
-        direction /= direction.Length();
-
-        Vector2 side = new Vector2(-direction.Y, direction.X);
-
-        int widthInt = (int)Math.Ceiling(width);
-
-        for (float t = 0; t <= 1; t += 1 / falloff)
-        {
-            Point center = Point.Lerp(start, end, t);
-            for (int y = -widthInt; y <= widthInt; y++)
-            {
-                for (int x = -widthInt; x <= widthInt; x++)
-                {
-                    Vector2 offset = x * direction + y * side;
-                    int posX = center.X + (int)(offset.X);
-                    int posY = center.Y + (int)(offset.Y);
-
-                    posX = Math.Clamp(posX, 0, heightMap.GetLength(0) - 1);
-                    posY = Math.Clamp(posY, 0, heightMap.GetLength(1) - 1);
-
-                    float distance = new Vector2(x, y).Length();
-                    if (distance <= falloff)
-                    {
-                        float riverElevation = (float)Lerp(depth, 0, distance / falloff);
-                        heightMap[posX, posY] = Math.Min(heightMap[posX, posY], riverElevation);
-                    }
-                }
-            }
-        }
-    }
-*/
     public static float Lerp(float a, float b, float t)
     {
         return a + (b - a) * t;
