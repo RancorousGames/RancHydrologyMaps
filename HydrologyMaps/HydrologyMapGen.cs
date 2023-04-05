@@ -116,7 +116,6 @@ public class HydrologyMapGen
         (List<DirectedNode> allRiverNodes, List<RiverEdge> riverEdges) =
             ExpandRiverGrid(heightmap, riverMouthCandidates, k);
 
-        GenerateRiverNodeHeights(riverMouthCandidates);
 
         allRiverNodes.ForEach(n => hydrologyKdTree.Insert(n));
 
@@ -135,35 +134,46 @@ public class HydrologyMapGen
 
         allRiverNodes.ForEach(x => hydrologyKdTree.Insert(x));
 
-
-        InterpolateHeightMap(heightmap, hydrologyKdTree, allRiverNodes.Select(x => (GraphNode)x).ToList(), width,
-            height, 5, 5f);
-
-
-        // flowrate = 0.42 · A^0.69
+        FindAreaForNodes(heightmap, hydrologyKdTree, allRiverNodes, width, height);
+        // flowrate = 0.42 · A^0.69. Before this point FlowRate holds the number of pixels for which the closest node is this
         allRiverNodes.ForEach(n => n.FlowRate = 0.42 * Math.Pow(n.FlowRate, 0.69));
+        riverMouthCandidates.ForEach(n => SetCumulativeFlowRate(n));
 
+        GenerateRiverNodeHeights(riverMouthCandidates);
+
+      InterpolateHeightMap(heightmap, hydrologyKdTree, allRiverNodes, width,
+          height, 3, 5f);
+
+        HydrologyTerrainFormer.CarveRivers(heightmap, riverMouthCandidates, 0.15f, 2.5f, 0.5f, Random/*, 0f, 4f, 0.5f, 3f, 10f*/);
 
         return new HydrologyMap(heightmap, allRiverNodes, riverEdges, gridCells, voronoiEdges, allPointsForVoronoi);
+    }
+
+    private double SetCumulativeFlowRate(DirectedNode node)
+    {
+        if (node.Children.Count > 0)
+            node.FlowRate = node.Children.Sum(n => SetCumulativeFlowRate((DirectedNode)n));
+        return node.FlowRate;
     }
 
     private void GenerateRiverNodeHeights(List<DirectedNode> riverMouthCandidates)
     {
         riverMouthCandidates.ForEach(n => GenerateRiverNodeHeightsRecursive(n, 0));
-        
-        void GenerateRiverNodeHeightsRecursive(GraphNode node, float height)
+
+        void GenerateRiverNodeHeightsRecursive(DirectedNode node, float height)
         {
             node.Height = height;
             if (node.Children.Count > 0)
             {
-                float newHeight = Math.Min(1, height + 0.1f * (float)Random.NextDouble());
+                float newHeight = node.FlowRate > parameters.ProperRiverMinimumFlowRate
+                    ? 0
+                    : Math.Min(1, height + 0.1f * (float)Random.NextDouble());
                 node.Children.ForEach(
-                    n => GenerateRiverNodeHeightsRecursive(n, newHeight));
+                    n => GenerateRiverNodeHeightsRecursive((DirectedNode)n, newHeight));
             }
         }
     }
-    
-    
+
 
     (List<DirectedNode> borderCoordinates, List<GraphNode> extraVoronoiPoints) GetRiverMouthCandidates(
         float[,] heightmap, int skipCount)
@@ -299,7 +309,24 @@ public class HydrologyMapGen
     }
 
 
-    public static void InterpolateHeightMap(float[,] heightmap, HydrologyKdTree2D kdTree, List<GraphNode> allNodes,
+    private void FindAreaForNodes(float[,] heightmap, HydrologyKdTree2D kdTree, List<DirectedNode> allNodes, int width,
+        int height)
+    {
+        // Iterate through the grid points
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                if (heightmap[x, y] == 0) continue;
+
+                // Add this pixel to the area of the closest rivernode (FlowRate is used for area at this point)
+                List<GraphNode> nearestNeighbors = kdTree.FindClosest(x, y, 1);
+                ((DirectedNode)nearestNeighbors.First()).FlowRate++;
+            }
+        }
+    }
+
+    public static void InterpolateHeightMap(float[,] heightmap, HydrologyKdTree2D kdTree, List<DirectedNode> allNodes,
         int width, int height, int numNeighbors, float maxSlope)
     {
         // Iterate through the grid points
@@ -308,39 +335,27 @@ public class HydrologyMapGen
             for (int x = 0; x < width; x++)
             {
                 if (heightmap[x, y] == 0) continue;
-                
+
                 // Query k-d tree for k nearest neighbors
                 List<GraphNode> nearestNeighbors = kdTree.FindClosest(x, y, numNeighbors);
 
                 // Calculate the interpolated height using IDW or other methods
                 float interpolatedHeight = 0;
                 double totalWeight = 0;
+                float minHeight = nearestNeighbors.Max(x => x.Height);
                 foreach (var neighbor in nearestNeighbors)
                 {
                     double distance = Distance(new Point(x, y), neighbor.Point);
                     if (distance == 0) distance = 1;
-                    
+
                     double weight = 1 / distance; // You can raise this to a power to control smoothness
-                    
-                    if (double.IsNaN(weight) || double.IsNaN(neighbor.Height))
-                    {
-                        Console.WriteLine("HEA");
-                    }
-                    
+
                     totalWeight += weight;
                     interpolatedHeight += (float)weight * neighbor.Height;
-                    
-                    if (double.IsNaN(interpolatedHeight))
-                    {
-                        Console.WriteLine("HEA");
-                    }
                 }
 
-                if (double.IsNaN(interpolatedHeight))
-                {
-                    Console.WriteLine("HEA");
-                }
-                interpolatedHeight = (float)(interpolatedHeight / totalWeight);
+
+                interpolatedHeight = Math.Max(0.0f, minHeight + (float)(interpolatedHeight / totalWeight));
 
                 // Adjust the interpolated height based on the closest node and maxSlope if needed
                 // ...

@@ -76,6 +76,22 @@ public class Point
     {
         return $"{X},{Y}";
     }
+    
+    public static Point Lerp(Point a, Point b, float t)
+    {
+        int x = (int)Math.Round(a.X + (b.X - a.X) * t);
+        int y = (int)Math.Round(a.Y + (b.Y - a.Y) * t);
+        return new Point( x, y);
+    }
+
+    public Vector2 ToVector()
+    {
+        return new Vector2(this.X, this.Y);
+    }
+    public static Point FromVector(Vector2 vector)
+    {
+        return new Point((int)vector.X, (int)vector.Y);
+    }
 }
 
 public class Vector2D
@@ -318,6 +334,7 @@ public class GraphNode : IGraphNode
     }
 
     public double[] Position { get; set; }
+    public Vector2 PositionVector => new Vector2(X, Y);
     public float Height { get; set; }
 }
 
@@ -365,8 +382,9 @@ public struct HydrologyParameters
     public float NodeExpansionMinHeight = 0.101f;
     public double MinAngleBetweenBranches = 60;
     public float BeachWidth = 5;
-    
-    
+    public double ProperRiverMinimumFlowRate = 38;
+
+
     public HydrologyParameters()
     {
     }

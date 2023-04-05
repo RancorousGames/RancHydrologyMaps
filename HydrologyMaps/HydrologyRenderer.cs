@@ -5,7 +5,7 @@ namespace HydrologyMaps;
 
 public class HydrologyRenderer
 {
-    public void SaveMapAsPNG(HydrologyMap map, string outputPath, bool renderVoronoi, bool renderExtraPoints,
+    public void SaveMapAsPNG(HydrologyMap map, string outputPath, bool renderVoronoi, bool renderExtraPoints, bool drawRiverEdges,
         HydrologyParameters parameters)
     {
         var heightmap = map.HeightMap;
@@ -48,12 +48,14 @@ public class HydrologyRenderer
                 }
             }
 
-
-            foreach (var edge in map.RiverEdges)
+            if (drawRiverEdges)
             {
-                int prioBasedColor = (int)((166 / edge.FlowRate));
-                var color = Color.FromArgb(prioBasedColor, prioBasedColor, 255);
-                DrawLineOnBitmap(bitmap, edge.P1.Point, edge.P2.Point, color, 1);
+                foreach (var edge in map.RiverEdges)
+                {
+                    int prioBasedColor = (int)((166 / edge.FlowRate));
+                    var color = Color.FromArgb(prioBasedColor, prioBasedColor, 255);
+                    DrawLineOnBitmap(bitmap, edge.P1.Point, edge.P2.Point, color, 1);
+                }
             }
 
 
@@ -65,19 +67,22 @@ public class HydrologyRenderer
                 }
             }
 
-            foreach (var riverMouth in map.AllRiverNodes)
+            
+            foreach (var riverNode in map.AllRiverNodes)
             {
-                bitmap.SetPixel(riverMouth.X, riverMouth.Y, Color.Red);
-                if (riverMouth.Type == NodeType.Border)
-                    bitmap.SetPixel(riverMouth.X + (int)(riverMouth.Direction.X * 5),
-                        riverMouth.Y + (int)(riverMouth.Direction.Y * 5), Color.Coral);
+                var flowRateNormalized = (int)Math.Min(255, riverNode.FlowRate / 100 * 255);
+                var col = Color.FromArgb(255, flowRateNormalized, flowRateNormalized);
+                bitmap.SetPixel(riverNode.X, riverNode.Y,col);
+                if (riverNode.Type == NodeType.Border)
+                    bitmap.SetPixel(riverNode.X + (int)(riverNode.Direction.X * 5),
+                        riverNode.Y + (int)(riverNode.Direction.Y * 5), Color.Coral);
 
-                bitmap.SetPixel(riverMouth.X + 1, riverMouth.Y - 1, Color.Red);
-                bitmap.SetPixel(riverMouth.X + 1, riverMouth.Y + 1, Color.Red);
+                bitmap.SetPixel(riverNode.X + 1, riverNode.Y - 1, col);
+                bitmap.SetPixel(riverNode.X + 1, riverNode.Y + 1, col);
 
-                bitmap.SetPixel(riverMouth.X - 1, riverMouth.Y - 1, Color.Red);
+                bitmap.SetPixel(riverNode.X - 1, riverNode.Y - 1, col);
 
-                bitmap.SetPixel(riverMouth.X - 1, riverMouth.Y + 1, Color.Red);
+                bitmap.SetPixel(riverNode.X - 1, riverNode.Y + 1, col);
             }
 
             foreach (var edge in HydrologyMapGen.DebugGraphEdges1)

@@ -31,7 +31,7 @@ public static class Program
         {
             var map = hydrologyMapGen.GenerateIsland(width, height, seed, (stepByStep ? i : 300));
 
-            hydrologyMapRender.SaveMapAsPNG(map, "./heightmap.png", false, true, parameters);
+            hydrologyMapRender.SaveMapAsPNG(map, "./heightmap.png", false, true,  false, parameters);
 
             // open heightmap
             var ps =  Process.GetProcesses();
