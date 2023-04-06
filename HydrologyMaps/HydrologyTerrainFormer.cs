@@ -9,10 +9,10 @@ public class HydrologyTerrainFormer
     public HydrologyTerrainFormer()
     {
         _noiseGenerator.SetNoiseType(FastNoiseLite.NoiseType.Perlin);
-        _noiseGenerator.SetFrequency(0.003f);
-        _noiseGenerator.SetFractalGain(0);
+        _noiseGenerator.SetFrequency(1.13f);
+        _noiseGenerator.SetFractalGain(1);
     }
-    
+
 
     public static void CarveRivers(float[,] heightMap, List<DirectedNode> riverRoots, float baseRiverWidth,
         float riverDepth, float smoothness, float falloff, float flowRateInfluence)
@@ -21,7 +21,8 @@ public class HydrologyTerrainFormer
 
         foreach (var root in riverRoots)
         {
-            AccumulateRiverSegmentsBFS(accumulatedDepthMap, root, baseRiverWidth, riverDepth, smoothness, falloff, flowRateInfluence);
+            AccumulateRiverSegmentsBFS(accumulatedDepthMap, root, baseRiverWidth, riverDepth, smoothness, falloff,
+                flowRateInfluence);
         }
 
         ApplyAccumulatedDepthMap(heightMap, accumulatedDepthMap);
@@ -47,7 +48,8 @@ public class HydrologyTerrainFormer
             {
                 DirectedNode parentNode = (DirectedNode)currentNode.Parent;
 
-                List<Point> fullPath = new List<Point> { parentNode.Point, currentNode.Point };//BuildFullPath(parentNode);
+                List<Point> fullPath = new List<Point>
+                    { parentNode.Point, currentNode.Point }; //BuildFullPath(parentNode);
                 List<Point> smoothedPath = GenerateSmoothedPath(parentNode.Point, currentNode.Point, new Random());
 
                 float startFlowRate = (float)parentNode.FlowRate / 512;
@@ -56,24 +58,24 @@ public class HydrologyTerrainFormer
                 AccumulateRiverSegment(accumulatedDepthMap, smoothedPath, startFlowRate, endFlowRate, baseRiverWidth,
                     riverDepth, falloff, flowRateInfluence);
             }
-            
+
             // If the current node is a leaf node, process it here.
-          //  if (currentNode.Children.Count == 0 && currentNode.Parent != null)
-          //  {
-          //      DirectedNode parentNode = (DirectedNode)currentNode.Parent;
+            //  if (currentNode.Children.Count == 0 && currentNode.Parent != null)
+            //  {
+            //      DirectedNode parentNode = (DirectedNode)currentNode.Parent;
 //
-          //      List<Point> fullPath = new List<Point> { parentNode.Point, currentNode.Point };
-          //      List<Point> smoothedPath =  GenerateSmoothedPath(parentNode.Point, currentNode.Point, new Random());
+            //      List<Point> fullPath = new List<Point> { parentNode.Point, currentNode.Point };
+            //      List<Point> smoothedPath =  GenerateSmoothedPath(parentNode.Point, currentNode.Point, new Random());
 //
-          //      float startFlowRate = (float)parentNode.FlowRate / 512;
-          //      float endFlowRate = (float)currentNode.FlowRate / 512;
+            //      float startFlowRate = (float)parentNode.FlowRate / 512;
+            //      float endFlowRate = (float)currentNode.FlowRate / 512;
 //
-          //      AccumulateRiverSegment(accumulatedDepthMap, smoothedPath, startFlowRate, endFlowRate, baseRiverWidth,
-          //          riverDepth, falloff, flowRateInfluence);
-          //  }
+            //      AccumulateRiverSegment(accumulatedDepthMap, smoothedPath, startFlowRate, endFlowRate, baseRiverWidth,
+            //          riverDepth, falloff, flowRateInfluence);
+            //  }
         }
     }
-    
+
     private static List<Point> BuildFullPath(DirectedNode currentNode)
     {
         List<DirectedNode> fullPath = new List<DirectedNode> { currentNode };
@@ -135,7 +137,7 @@ public class HydrologyTerrainFormer
         smoothedPath.Add(path[^1]);
         return smoothedPath;
     }
-    
+
     // Calculate the Catmull-Rom spline for a set of control points and a parameter t
     private static Vector2 CatmullRomSpline(Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, float t)
     {
@@ -149,7 +151,8 @@ public class HydrologyTerrainFormer
     }
 
     private static void AccumulateRiverSegment(float[,] accumulatedDepthMap, List<Point> smoothedPath,
-        float startFlowRate, float endFlowRate, float baseRiverWidth, float riverDepth, float fallOffSharpness, float flowRateInfluence)
+        float startFlowRate, float endFlowRate, float baseRiverWidth, float riverDepth, float fallOffSharpness,
+        float flowRateInfluence)
     {
         for (int i = 0; i < smoothedPath.Count - 1; i++)
         {
@@ -157,8 +160,8 @@ public class HydrologyTerrainFormer
             Point end = smoothedPath[i + 1];
 
             float t = (float)i / (smoothedPath.Count - 1);
-            
-            
+
+
             // formula is baseRiverWidth + sigmoid formula centered on 1
             float startFlowRateFactor =
                 (float)(1 + flowRateInfluence * ((1 / (1 + Math.Pow(Math.E, -startFlowRate * 10)) - 0.5)));
@@ -167,11 +170,15 @@ public class HydrologyTerrainFormer
             float startWidth = baseRiverWidth * startFlowRateFactor;
             float endWidth = baseRiverWidth * endFlowRateFactor;
 
-            float startDepth =riverDepth;//*(float)Math.Pow(startFlowRateFactor, 0.6f);// 0.5f * riverDepth + 0.02f * riverDepth * startFlowRate;
-            float endDepth =  riverDepth;//*(float)Math.Pow(endFlowRateFactor, 0.6f);//0.5f *riverDepth + 0.02f * riverDepth* endFlowRate;
-            
-            
-            CarveRiverSegment(accumulatedDepthMap, start, end, startDepth, endDepth, startWidth, endWidth, fallOffSharpness);
+            float
+                startDepth =
+                    riverDepth; //*(float)Math.Pow(startFlowRateFactor, 0.6f);// 0.5f * riverDepth + 0.02f * riverDepth * startFlowRate;
+            float
+                endDepth = riverDepth; //*(float)Math.Pow(endFlowRateFactor, 0.6f);//0.5f *riverDepth + 0.02f * riverDepth* endFlowRate;
+
+
+            CarveRiverSegment(accumulatedDepthMap, start, end, startDepth, endDepth, startWidth, endWidth,
+                fallOffSharpness);
         }
     }
 
@@ -207,14 +214,15 @@ public class HydrologyTerrainFormer
 
                     if (distance <= currentWidth)
                     {
-                       float scaledDistance = distance / currentWidth;
-                       //float depthFalloff = (float)(1 - (3 * Math.Pow(scaledDistance, fallOffSharpness) - 2 * Math.Pow(scaledDistance, fallOffSharpness + 1)));
-                    //    double depthFalloff = 1 / (1+Math.Pow(Math.E, fallOffSharpness*(distance-(currentWidth*0.8f))));
-                 
-                       //double depthFalloff = 1-(distance/currentWidth);
-                    
-                        double depthFalloff = 1 / (1+Math.Pow(Math.E, fallOffSharpness*(distance-(currentWidth*(0.7)))));
-                       //depthFalloff = 1-scaledDistance;
+                        float scaledDistance = distance / currentWidth;
+                        //float depthFalloff = (float)(1 - (3 * Math.Pow(scaledDistance, fallOffSharpness) - 2 * Math.Pow(scaledDistance, fallOffSharpness + 1)));
+                        //    double depthFalloff = 1 / (1+Math.Pow(Math.E, fallOffSharpness*(distance-(currentWidth*0.8f))));
+
+                        //double depthFalloff = 1-(distance/currentWidth);
+
+                        double depthFalloff = 1 / (1 + Math.Pow(Math.E,
+                            fallOffSharpness * (distance - (currentWidth * (0.7)))));
+                        //depthFalloff = 1-scaledDistance;
                         float adjustedDepth = currentDepth * (float)depthFalloff;
                         accumulatedDepthMap[offsetPosition.X, offsetPosition.Y] =
                             Math.Max(accumulatedDepthMap[offsetPosition.X, offsetPosition.Y], adjustedDepth);
@@ -246,5 +254,183 @@ public class HydrologyTerrainFormer
     private static float Lerp(float start, float end, float t)
     {
         return start + (end - start) * t;
+    }
+
+    public static void InterpolateHeightMapSimple(float[,] heightmap, HydrologyKdTree2D borderKdTree,
+        List<DirectedNode> allNodes,
+        int width, int height, int numNeighbors, float maxSlope)
+    {
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                if (heightmap[x, y] == 0) continue;
+                float dist = Math.Min(1,(float)Point.Distance(new Point(x, y), borderKdTree.FindClosest(x, y, 1).First().Point)/180);
+                heightmap[x, y] = heightmap[x, y] *dist * Math.Min(1, 0.7f + _noiseGenerator.GetNoise(x * 3, y * 3) * 0.3f);
+            }
+        }
+    }
+
+
+    // ========== Base heightmap formation ===========
+    public static void InterpolateHeightMap(float[,] heightmap, HydrologyKdTree2D kdTree, List<DirectedNode> allNodes,
+        int width, int height, int numNeighbors, float maxSlope)
+    {
+        // Iterate through the grid points
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                if (heightmap[x, y] == 0) continue;
+
+                // Query k-d tree for k nearest neighbors
+                List<GraphNode> nearestNeighbors = kdTree.FindClosest(x, y, numNeighbors);
+
+                // Calculate the interpolated height using IDW or other methods
+                float interpolatedHeight = 0;
+                double totalWeight = 0;
+                float minHeight = nearestNeighbors.Max(x => x.Height);
+                double distanceSum = 0;
+                foreach (var neighbor in nearestNeighbors)
+                {
+                    double distance = Point.Distance(new Point(x, y), neighbor.Point);
+                    distanceSum += distance;
+                    if (distance == 0) distance = 1;
+
+                    double weight = 1 / distance; // You can raise this to a power to control smoothness
+
+                    totalWeight += weight;
+                    interpolatedHeight += (float)weight * neighbor.Height;
+                }
+
+                float minBaseHeight = 0.1f; // Math.Min(0.3f, (float)Math.Pow(distanceSum, 1.1) * 0.001f);
+
+                interpolatedHeight = Math.Max(minBaseHeight, minHeight + (float)(interpolatedHeight / totalWeight));
+
+                // Adjust the interpolated height based on the closest node and maxSlope if needed
+                // ...
+
+                heightmap[x, y] = interpolatedHeight;
+            }
+        }
+
+        // Second pass: adjust the height values based on the maxSlope constraint
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                float currentHeight = heightmap[x, y];
+
+                if (currentHeight == 0) continue;
+
+                // Iterate through the 8 neighboring pixels
+                for (int dy = -1; dy <= 1; dy++)
+                {
+                    for (int dx = -1; dx <= 1; dx++)
+                    {
+                        if (dx == 0 && dy == 0) continue;
+
+                        int nx = x + dx;
+                        int ny = y + dy;
+
+                        // Check if the neighboring pixel is within the bounds of the heightmap
+                        if (nx >= 0 && nx < width && ny >= 0 && ny < height)
+                        {
+                            float neighborHeight = heightmap[nx, ny];
+                            float heightDifference = Math.Abs(currentHeight - neighborHeight);
+
+                            // Check if the height difference exceeds the maxSlope constraint
+                            if (heightDifference > maxSlope)
+                            {
+                                float adjustedHeightDifference = maxSlope * (heightDifference / maxSlope);
+                                if (currentHeight > neighborHeight)
+                                {
+                                    heightmap[nx, ny] = currentHeight - adjustedHeightDifference;
+                                }
+                                else
+                                {
+                                    heightmap[x, y] = neighborHeight - adjustedHeightDifference;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    public static void FillBaseHeightmap(float[,] heightmap, int width, int height, Random random, HydrologyParameters parameters)
+    {
+        FastNoiseLite noiseGenerator = new FastNoiseLite();
+        noiseGenerator.SetNoiseType(FastNoiseLite.NoiseType.OpenSimplex2);
+        noiseGenerator.SetSeed(random.Next());
+        noiseGenerator.SetFrequency(0.003f);
+        noiseGenerator.SetFractalGain(0);
+
+
+        int borderSize = 5;
+
+        float beachWidth = parameters.BeachWidth;
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                float radialGradient = GetRadialGradient(x, y, width, height);
+
+                float perlinValue =
+                    (noiseGenerator.GetNoise(x, y) + 1f) * radialGradient /
+                    2f; // Normalize Perlin noise to the range [0, 1]
+
+                if (perlinValue < 0.2)
+                {
+                    if (perlinValue < 0.15)
+                    {
+                        perlinValue = 0;
+                    }
+                    else // if (x > beachWidth && x < width - beachWidth  && y > beachWidth && y < width - beachWidth)
+                    {
+                        bool isNearOcean = false;
+                        for (int yo = -(int)beachWidth; yo < beachWidth; yo++)
+                        {
+                            for (int xo = -(int)beachWidth; xo < beachWidth; xo++)
+                            {
+                                float offsetRadialGradient = GetRadialGradient(x + xo, y + yo, width, height);
+                                float offSetPerlinValue =
+                                    (noiseGenerator.GetNoise(x + xo, y + yo) + 1f) * offsetRadialGradient / 2f;
+
+                                if (offSetPerlinValue < 0.15)
+                                {
+                                    isNearOcean = true;
+                                    break;
+                                }
+                            }
+
+                            if (isNearOcean) break;
+                        }
+
+                        if (isNearOcean) perlinValue = 0.1f;
+                    }
+                }
+
+
+                //  else if (perlinValue < 0.165) perlinValue = 0.15f;
+                //else perlinValue = 0.5f;
+                heightmap[x, y] = perlinValue;
+            }
+
+            
+        }
+    }
+    
+    static float GetRadialGradient(int x, int y, int width, int height)
+    {
+        float centerX = width / 2f;
+        float centerY = height / 2f;
+        
+        float distanceX = x - centerX;
+        float distanceY = y - centerY;
+        float distanceToCenter = (float)Math.Sqrt(distanceX * distanceX + distanceY * distanceY);
+        return 1f - Math.Min(1f, distanceToCenter / (Math.Min(width, height) / 2.5f));
     }
 }

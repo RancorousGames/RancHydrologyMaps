@@ -70,27 +70,35 @@ public class Point
     {
         return new Point(Math.Abs(X), Math.Abs(Y));
     }
-    
-    
+
+
     public override string ToString()
     {
         return $"{X},{Y}";
     }
-    
+
     public static Point Lerp(Point a, Point b, float t)
     {
         int x = (int)Math.Round(a.X + (b.X - a.X) * t);
         int y = (int)Math.Round(a.Y + (b.Y - a.Y) * t);
-        return new Point( x, y);
+        return new Point(x, y);
     }
 
     public Vector2 ToVector()
     {
         return new Vector2(this.X, this.Y);
     }
+
     public static Point FromVector(Vector2 vector)
     {
         return new Point((int)vector.X, (int)vector.Y);
+    }
+
+    public static double Distance(Point p1, Point p2)
+    {
+        int dx = p1.X - p2.X;
+        int dy = p1.Y - p2.Y;
+        return Math.Sqrt(dx * dx + dy * dy);
     }
 }
 
@@ -223,10 +231,10 @@ public class Vector2D
 
 public interface IEdge
 {
-    double X1 {get;}
-    double X2 {get;}
-    double Y1 {get;}
-    double Y2 {get;}
+    double X1 { get; }
+    double X2 { get; }
+    double Y1 { get; }
+    double Y2 { get; }
 }
 
 public class RiverEdge : IEdge
@@ -235,8 +243,8 @@ public class RiverEdge : IEdge
     public double X2 => P2.X;
     public double Y1 => P1.Y;
     public double Y2 => P2.Y;
-    
-    
+
+
     public RiverEdge(DirectedNode p1, DirectedNode p2, float flowRate)
     {
         P1 = p1;
@@ -249,11 +257,12 @@ public class RiverEdge : IEdge
     public DirectedNode P1 { get; }
 
     public float FlowRate { get; }
-    
+
     public override string ToString()
     {
         return $"RiverEdge {{ P1 = {P1}, P2 = {P2}, FlowRate = {FlowRate} }}";
     }
+
     public static double DistanceBetweenPointAndLineSegment(Vector2D start, Vector2D end, Vector2D point)
     {
         // Find the displacement vector of the line segment
@@ -322,7 +331,7 @@ public class GraphNode : IGraphNode
     public GraphNode? Parent { get; }
 
     public List<GraphNode> Children { get; } = new List<GraphNode>(2);
-    
+
     public GraphNode(Point point, NodeType type, GraphNode? parent = null)
     {
         Point = point;
@@ -330,7 +339,6 @@ public class GraphNode : IGraphNode
         Parent = parent;
         Position = new double[] { point.X, point.Y };
         parent?.Children.Add(this);
-
     }
 
     public double[] Position { get; set; }
@@ -354,7 +362,7 @@ public class DirectedNode : GraphNode
         this.Priority = priority;
         Position = new double[] { point.X, point.Y };
     }
-    
+
     public override string ToString()
     {
         return $"{{ Pos: {Point} Dir: {Direction}, Prio {Priority} }}";
@@ -388,7 +396,6 @@ public struct HydrologyParameters
     public HydrologyParameters()
     {
     }
-
 }
 
 public struct GridCell
