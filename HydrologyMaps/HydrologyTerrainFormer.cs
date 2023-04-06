@@ -12,63 +12,68 @@ public class HydrologyTerrainFormer
         _noiseGenerator.SetFrequency(0.003f);
         _noiseGenerator.SetFractalGain(0);
     }
+    
 
     public static void CarveRivers(float[,] heightMap, List<DirectedNode> riverRoots, float baseRiverWidth,
-        float riverDepth, float smoothness, float falloff)
+        float riverDepth, float smoothness, float falloff, float flowRateInfluence)
     {
         float[,] accumulatedDepthMap = new float[heightMap.GetLength(0), heightMap.GetLength(1)];
 
         foreach (var root in riverRoots)
         {
-            AccumulateRiverSegmentsDFS(accumulatedDepthMap, root, baseRiverWidth, riverDepth, smoothness, falloff);
+            AccumulateRiverSegmentsBFS(accumulatedDepthMap, root, baseRiverWidth, riverDepth, smoothness, falloff, flowRateInfluence);
         }
 
         ApplyAccumulatedDepthMap(heightMap, accumulatedDepthMap);
     }
 
-    private static void AccumulateRiverSegmentsDFS(float[,] accumulatedDepthMap, DirectedNode currentNode,
-        float baseRiverWidth, float riverDepth, float smoothness, float falloff)
+    private static void AccumulateRiverSegmentsBFS(float[,] accumulatedDepthMap, DirectedNode root,
+        float baseRiverWidth, float riverDepth, float smoothness, float falloff, float flowRateInfluence)
     {
-        foreach (var childGraphNode in currentNode.Children)
+        Queue<DirectedNode> queue = new Queue<DirectedNode>();
+        queue.Enqueue(root);
+
+        while (queue.Count > 0)
         {
-            var childNode = (DirectedNode)childGraphNode;
+            DirectedNode currentNode = queue.Dequeue();
 
-            List<Point> fullPath = BuildFullPath(currentNode);
-            List<Point> smoothedPath = GenerateSmoothedPath(fullPath, smoothness);
+            foreach (var childGraphNode in currentNode.Children)
+            {
+                var childNode = (DirectedNode)childGraphNode;
+                queue.Enqueue(childNode);
+            }
 
-            float startFlowRate = (float)currentNode.FlowRate / 25;
-            float endFlowRate = (float)childNode.FlowRate / 25;
+            if (currentNode.Parent != null)
+            {
+                DirectedNode parentNode = (DirectedNode)currentNode.Parent;
 
-            AccumulateRiverSegment(accumulatedDepthMap, smoothedPath, startFlowRate, endFlowRate, baseRiverWidth,
-                riverDepth, falloff);
+                List<Point> fullPath = BuildFullPath(parentNode);
+                List<Point> smoothedPath = GenerateSmoothedPath(fullPath, smoothness);
 
-            AccumulateRiverSegmentsDFS(accumulatedDepthMap, childNode, baseRiverWidth, riverDepth, smoothness, falloff);
-        }
+                float startFlowRate = (float)parentNode.FlowRate / 512;
+                float endFlowRate = (float)currentNode.FlowRate / 512;
 
-        // If the current node is a leaf node, process it here.
-        if (currentNode.Children.Count == 0)
-        {
-            ProcessLeafNode(accumulatedDepthMap, currentNode, baseRiverWidth, riverDepth, smoothness, falloff);
+                AccumulateRiverSegment(accumulatedDepthMap, smoothedPath, startFlowRate, endFlowRate, baseRiverWidth,
+                    riverDepth, falloff, flowRateInfluence);
+            }
+            
+            // If the current node is a leaf node, process it here.
+            if (currentNode.Children.Count == 0 && currentNode.Parent != null)
+            {
+                DirectedNode parentNode = (DirectedNode)currentNode.Parent;
+
+                List<Point> fullPath = new List<Point> { parentNode.Point, currentNode.Point };
+                List<Point> smoothedPath = GenerateSmoothedPath(fullPath, smoothness);
+
+                float startFlowRate = (float)parentNode.FlowRate / 512;
+                float endFlowRate = (float)currentNode.FlowRate / 512;
+
+                AccumulateRiverSegment(accumulatedDepthMap, smoothedPath, startFlowRate, endFlowRate, baseRiverWidth,
+                    riverDepth, falloff, flowRateInfluence);
+            }
         }
     }
-
-    private static void ProcessLeafNode(float[,] accumulatedDepthMap, DirectedNode leafNode, float baseRiverWidth,
-        float riverDepth, float smoothness, float falloff)
-    {
-        if (leafNode.Parent == null) return;
-
-        DirectedNode parentNode = (DirectedNode)leafNode.Parent;
-
-        List<Point> fullPath = new List<Point> { parentNode.Point, leafNode.Point };
-        List<Point> smoothedPath = GenerateSmoothedPath(fullPath, smoothness);
-
-        float startFlowRate = (float)parentNode.FlowRate / 25;
-        float endFlowRate = (float)leafNode.FlowRate / 25;
-
-        AccumulateRiverSegment(accumulatedDepthMap, smoothedPath, startFlowRate, endFlowRate, baseRiverWidth,
-            riverDepth, falloff);
-    }
-
+    
     private static List<Point> BuildFullPath(DirectedNode currentNode)
     {
         List<DirectedNode> fullPath = new List<DirectedNode> { currentNode };
@@ -90,7 +95,7 @@ public class HydrologyTerrainFormer
     }
 
     private static void AccumulateRiverSegment(float[,] accumulatedDepthMap, List<Point> smoothedPath,
-        float startFlowRate, float endFlowRate, float baseRiverWidth, float riverDepth, float falloffFactor)
+        float startFlowRate, float endFlowRate, float baseRiverWidth, float riverDepth, float fallOffSharpness, float flowRateInfluence)
     {
         for (int i = 0; i < smoothedPath.Count - 1; i++)
         {
@@ -98,26 +103,31 @@ public class HydrologyTerrainFormer
             Point end = smoothedPath[i + 1];
 
             float t = (float)i / (smoothedPath.Count - 1);
-
-            float startWidth = baseRiverWidth * (float)Math.Pow(startFlowRate, 0.3);
-            float endWidth = baseRiverWidth * (float)Math.Pow(endFlowRate, 0.3);
-
-            float startDepth = riverDepth * startFlowRate;
-            float endDepth = riverDepth * endFlowRate;
             
-            CarveRiverSegment(accumulatedDepthMap, start, end, startDepth, endDepth, startWidth, endWidth, falloffFactor);
+            
+            // formula is baseRiverWidth + sigmoid formula centered on 1
+            float startFlowRateFactor =
+                (float)(1 + flowRateInfluence * ((1 / (1 + Math.Pow(Math.E, -startFlowRate * 10)) - 0.5)));
+            float endFlowRateFactor =
+                (float)(1 + flowRateInfluence * ((1 / (1 + Math.Pow(Math.E, -endFlowRate * 10)) - 0.5)));
+            float startWidth = baseRiverWidth * startFlowRateFactor;
+            float endWidth = baseRiverWidth * endFlowRateFactor;
+
+            float startDepth =riverDepth;//*(float)Math.Pow(startFlowRateFactor, 0.6f);// 0.5f * riverDepth + 0.02f * riverDepth * startFlowRate;
+            float endDepth =  riverDepth;//*(float)Math.Pow(endFlowRateFactor, 0.6f);//0.5f *riverDepth + 0.02f * riverDepth* endFlowRate;
+            
+            
+            CarveRiverSegment(accumulatedDepthMap, start, end, startDepth, endDepth, startWidth, endWidth, fallOffSharpness);
         }
     }
 
     private static void CarveRiverSegment(float[,] accumulatedDepthMap, Point start, Point end, float startDepth,
-        float endDepth, float startWidth, float endWidth, float falloffFactor)
+        float endDepth, float startWidth, float endWidth, float fallOffSharpness)
     {
         // Calculate the line equation between start and end points
         Vector2 direction = (end - start).ToVector();
         int numSteps = (int)direction.Length();
         direction /= numSteps;
-
-        Vector2 perpendicular = new Vector2(-direction.Y, direction.X);
 
         // Iterate over the points along the line between start and end points
         for (int i = 0; i <= numSteps; i++)
@@ -143,10 +153,15 @@ public class HydrologyTerrainFormer
 
                     if (distance <= currentWidth)
                     {
-                        float scaledDistance = distance / currentWidth;
-                        float depthFalloff = (float)(1 - (3 * Math.Pow(scaledDistance, 2) - 2 * Math.Pow(scaledDistance, 3)));
-                        
-                        float adjustedDepth = currentDepth * depthFalloff;
+                       float scaledDistance = distance / currentWidth;
+                       //float depthFalloff = (float)(1 - (3 * Math.Pow(scaledDistance, fallOffSharpness) - 2 * Math.Pow(scaledDistance, fallOffSharpness + 1)));
+                    //    double depthFalloff = 1 / (1+Math.Pow(Math.E, fallOffSharpness*(distance-(currentWidth*0.8f))));
+                 
+                       //double depthFalloff = 1-(distance/currentWidth);
+                    
+                        double depthFalloff = 1 / (1+Math.Pow(Math.E, fallOffSharpness*(distance-(currentWidth*(0.7)))));
+                       //depthFalloff = 1-scaledDistance;
+                        float adjustedDepth = currentDepth * (float)depthFalloff;
                         accumulatedDepthMap[offsetPosition.X, offsetPosition.Y] =
                             Math.Max(accumulatedDepthMap[offsetPosition.X, offsetPosition.Y], adjustedDepth);
                     }

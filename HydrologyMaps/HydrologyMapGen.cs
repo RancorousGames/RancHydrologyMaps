@@ -135,7 +135,7 @@ public class HydrologyMapGen
         allRiverNodes.ForEach(x => hydrologyKdTree.Insert(x));
 
         FindAreaForNodes(heightmap, hydrologyKdTree, allRiverNodes, width, height);
-        // flowrate = 0.42 · A^0.69. Before this point FlowRate holds the number of pixels for which the closest node is this
+        // flowrate = 0.42 · A^0.69 formula from hydrology paper. Before this point FlowRate holds the number of pixels for which the closest node is this
         allRiverNodes.ForEach(n => n.FlowRate = 0.42 * Math.Pow(n.FlowRate, 0.69));
         riverMouthCandidates.ForEach(n => SetCumulativeFlowRate(n));
 
@@ -144,7 +144,7 @@ public class HydrologyMapGen
     //  InterpolateHeightMap(heightmap, hydrologyKdTree, allRiverNodes, width,
     //      height, 3, 5f);
 
-        HydrologyTerrainFormer.CarveRivers(heightmap, riverMouthCandidates.Skip(1).Take(1).ToList(), 5.15f, 0.2f, 0.3f, 12f/*, 0.5f, 0f, 4f, 0.5f, 3f, 10f*/);
+        HydrologyTerrainFormer.CarveRivers(heightmap, riverMouthCandidates/*.Skip(1).Take(1).ToList()*/, 1.5f, 0.2f, 0.3f, 1f, 8f);
 
         return new HydrologyMap(heightmap, allRiverNodes, riverEdges, gridCells, voronoiEdges, allPointsForVoronoi);
     }
