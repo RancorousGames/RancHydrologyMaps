@@ -144,7 +144,7 @@ public class HydrologyMapGen
     //  InterpolateHeightMap(heightmap, hydrologyKdTree, allRiverNodes, width,
     //      height, 3, 5f);
 
-        HydrologyTerrainFormer.CarveRivers(heightmap, riverMouthCandidates, 0.15f, 3f, 0.3f, 0.5f, Random/*, 0f, 4f, 0.5f, 3f, 10f*/);
+        HydrologyTerrainFormer.CarveRivers(heightmap, riverMouthCandidates.Skip(1).Take(1).ToList(), 5.15f, 0.2f, 0.3f, 12f/*, 0.5f, 0f, 4f, 0.5f, 3f, 10f*/);
 
         return new HydrologyMap(heightmap, allRiverNodes, riverEdges, gridCells, voronoiEdges, allPointsForVoronoi);
     }
