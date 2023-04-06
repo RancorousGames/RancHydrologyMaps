@@ -47,8 +47,8 @@ public class HydrologyTerrainFormer
             {
                 DirectedNode parentNode = (DirectedNode)currentNode.Parent;
 
-                List<Point> fullPath = BuildFullPath(parentNode);
-                List<Point> smoothedPath = GenerateSmoothedPath(fullPath, smoothness);
+                List<Point> fullPath = new List<Point> { parentNode.Point, currentNode.Point };//BuildFullPath(parentNode);
+                List<Point> smoothedPath = GenerateSmoothedPath(parentNode.Point, currentNode.Point, new Random());
 
                 float startFlowRate = (float)parentNode.FlowRate / 512;
                 float endFlowRate = (float)currentNode.FlowRate / 512;
@@ -58,19 +58,19 @@ public class HydrologyTerrainFormer
             }
             
             // If the current node is a leaf node, process it here.
-            if (currentNode.Children.Count == 0 && currentNode.Parent != null)
-            {
-                DirectedNode parentNode = (DirectedNode)currentNode.Parent;
-
-                List<Point> fullPath = new List<Point> { parentNode.Point, currentNode.Point };
-                List<Point> smoothedPath = GenerateSmoothedPath(fullPath, smoothness);
-
-                float startFlowRate = (float)parentNode.FlowRate / 512;
-                float endFlowRate = (float)currentNode.FlowRate / 512;
-
-                AccumulateRiverSegment(accumulatedDepthMap, smoothedPath, startFlowRate, endFlowRate, baseRiverWidth,
-                    riverDepth, falloff, flowRateInfluence);
-            }
+          //  if (currentNode.Children.Count == 0 && currentNode.Parent != null)
+          //  {
+          //      DirectedNode parentNode = (DirectedNode)currentNode.Parent;
+//
+          //      List<Point> fullPath = new List<Point> { parentNode.Point, currentNode.Point };
+          //      List<Point> smoothedPath =  GenerateSmoothedPath(parentNode.Point, currentNode.Point, new Random());
+//
+          //      float startFlowRate = (float)parentNode.FlowRate / 512;
+          //      float endFlowRate = (float)currentNode.FlowRate / 512;
+//
+          //      AccumulateRiverSegment(accumulatedDepthMap, smoothedPath, startFlowRate, endFlowRate, baseRiverWidth,
+          //          riverDepth, falloff, flowRateInfluence);
+          //  }
         }
     }
     
@@ -88,10 +88,64 @@ public class HydrologyTerrainFormer
         return fullPath.Select(node => node.Point).ToList();
     }
 
-    private static List<Point> GenerateSmoothedPath(List<Point> fullPath, float smoothness)
+    private static List<Point> GenerateSmoothedPath(Point start, Point end, Random random)
     {
-        // todo: Catmull-Rom splines
-        return fullPath;
+        List<Point> path = new List<Point> { start, end };
+        List<Point> smoothedPath = new List<Point>();
+
+        Vector2 direction = (end - start).ToVector();
+        direction /= direction.Length();
+
+        // Add random control points to the path for twists and turns
+        int numControlPoints = random.Next(1, 4);
+        for (int i = 0; i < numControlPoints; i++)
+        {
+            float t = (float)i / (numControlPoints + 1);
+            Point controlPoint = Point.Lerp(start, end, t);
+
+            // Create a random angle based on the current direction (between -45 and 45 degrees)
+            float angle = random.Next(-90, 90) * (float)Math.PI / 180f;
+
+            // Calculate the new direction with the random angle applied
+            Vector2 newDirection = new Vector2(
+                direction.X * (float)Math.Cos(angle) - direction.Y * (float)Math.Sin(angle),
+                direction.X * (float)Math.Sin(angle) + direction.Y * (float)Math.Cos(angle)
+            );
+
+            // Calculate the random offset using the new direction
+            Vector2 randomOffset = newDirection * random.Next(1, 5);
+
+            controlPoint += Point.FromVector(randomOffset);
+            path.Insert(1 + i, controlPoint);
+        }
+
+        // Smooth the path using Catmull-Rom splines
+        for (float t = 0; t < path.Count - 1; t += 0.5f)
+        {
+            int index = (int)Math.Floor(t);
+            Point p0 = path[Math.Clamp(index - 1, 0, path.Count - 1)];
+            Point p1 = path[index];
+            Point p2 = path[index + 1];
+            Point p3 = path[Math.Clamp(index + 2, 0, path.Count - 1)];
+
+            Vector2 point = CatmullRomSpline(p0.ToVector(), p1.ToVector(), p2.ToVector(), p3.ToVector(), t - index);
+            smoothedPath.Add(Point.FromVector(point));
+        }
+
+        smoothedPath.Add(path[^1]);
+        return smoothedPath;
+    }
+    
+    // Calculate the Catmull-Rom spline for a set of control points and a parameter t
+    private static Vector2 CatmullRomSpline(Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, float t)
+    {
+        Vector2 a = 2f * p1;
+        Vector2 b = p2 - p0;
+        Vector2 c = 2f * p0 - 5f * p1 + 4f * p2 - p3;
+        Vector2 d = -p0 + 3f * p1 - 3f *
+            p2 + p3;
+
+        return 0.5f * (a + (b * t) + (c * t * t) + (d * t * t * t));
     }
 
     private static void AccumulateRiverSegment(float[,] accumulatedDepthMap, List<Point> smoothedPath,
