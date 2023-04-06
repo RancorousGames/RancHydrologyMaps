@@ -31,76 +31,10 @@ public class HydrologyMapGen
 
         Random = new Random(seed);
 
-        FastNoiseLite noiseGenerator = new FastNoiseLite();
-        noiseGenerator.SetNoiseType(FastNoiseLite.NoiseType.OpenSimplex2);
-        noiseGenerator.SetSeed(Random.Next());
-        noiseGenerator.SetFrequency(0.003f);
-        noiseGenerator.SetFractalGain(0);
 
         float[,] heightmap = new float[width, height];
 
-        float centerX = width / 2f;
-        float centerY = height / 2f;
-
-        int borderSize = 5;
-
-        float beachWidth = parameters.BeachWidth;
-
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                float radialGradient = GetRadialGradient(x, y);
-
-                float perlinValue =
-                    (noiseGenerator.GetNoise(x, y) + 1f) * radialGradient /
-                    2f; // Normalize Perlin noise to the range [0, 1]
-
-                if (perlinValue < 0.2)
-                {
-                    if (perlinValue < 0.15)
-                    {
-                        perlinValue = 0;
-                    }
-                    else // if (x > beachWidth && x < width - beachWidth  && y > beachWidth && y < width - beachWidth)
-                    {
-                        bool isNearOcean = false;
-                        for (int yo = -(int)beachWidth; yo < beachWidth; yo++)
-                        {
-                            for (int xo = -(int)beachWidth; xo < beachWidth; xo++)
-                            {
-                                float offsetRadialGradient = GetRadialGradient(x + xo, y + yo);
-                                float offSetPerlinValue =
-                                    (noiseGenerator.GetNoise(x + xo, y + yo) + 1f) * offsetRadialGradient / 2f;
-
-                                if (offSetPerlinValue < 0.15)
-                                {
-                                    isNearOcean = true;
-                                    break;
-                                }
-                            }
-
-                            if (isNearOcean) break;
-                        }
-
-                        if (isNearOcean) perlinValue = 0.1f;
-                    }
-                }
-
-
-                //  else if (perlinValue < 0.165) perlinValue = 0.15f;
-                //else perlinValue = 0.5f;
-                heightmap[x, y] = perlinValue;
-            }
-
-            float GetRadialGradient(int x, int y)
-            {
-                float distanceX = x - centerX;
-                float distanceY = y - centerY;
-                float distanceToCenter = (float)Math.Sqrt(distanceX * distanceX + distanceY * distanceY);
-                return 1f - Math.Min(1f, distanceToCenter / (Math.Min(width, height) / 2.5f));
-            }
-        }
+        HydrologyTerrainFormer.FillBaseHeightmap(heightmap, width, height, Random, parameters);
 
         (List<DirectedNode> riverMouthCandidates, List<GraphNode> extraVoronoiPoints) =
             GetRiverMouthCandidates(heightmap, parameters.SpaceBetweenRiverMouthCandidates);
@@ -112,6 +46,11 @@ public class HydrologyMapGen
                 new List<IGraphNode>());
         }
 
+        
+        HydrologyKdTree2D borderKdTree = new HydrologyKdTree2D();
+        riverMouthCandidates.ForEach(n => borderKdTree.Insert(n));
+        extraVoronoiPoints.ForEach(n => borderKdTree.Insert(n));
+        
         HydrologyKdTree2D hydrologyKdTree = new HydrologyKdTree2D();
         (List<DirectedNode> allRiverNodes, List<RiverEdge> riverEdges) =
             ExpandRiverGrid(heightmap, riverMouthCandidates, k);
@@ -141,8 +80,8 @@ public class HydrologyMapGen
 
         GenerateRiverNodeHeights(riverMouthCandidates);
 
-    //  InterpolateHeightMap(heightmap, hydrologyKdTree, allRiverNodes, width,
-    //      height, 3, 5f);
+        HydrologyTerrainFormer.InterpolateHeightMapSimple(heightmap, borderKdTree, allRiverNodes, width,
+          height, 10, 5f);
 
         HydrologyTerrainFormer.CarveRivers(heightmap, riverMouthCandidates/*.Skip(1).Take(1).ToList()*/, 1.2f, 0.2f, 0.3f, 1f, 8f);
 
@@ -326,89 +265,6 @@ public class HydrologyMapGen
         }
     }
 
-    public static void InterpolateHeightMap(float[,] heightmap, HydrologyKdTree2D kdTree, List<DirectedNode> allNodes,
-        int width, int height, int numNeighbors, float maxSlope)
-    {
-        // Iterate through the grid points
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                if (heightmap[x, y] == 0) continue;
-
-                // Query k-d tree for k nearest neighbors
-                List<GraphNode> nearestNeighbors = kdTree.FindClosest(x, y, numNeighbors);
-
-                // Calculate the interpolated height using IDW or other methods
-                float interpolatedHeight = 0;
-                double totalWeight = 0;
-                float minHeight = nearestNeighbors.Max(x => x.Height);
-                foreach (var neighbor in nearestNeighbors)
-                {
-                    double distance = Distance(new Point(x, y), neighbor.Point);
-                    if (distance == 0) distance = 1;
-
-                    double weight = 1 / distance; // You can raise this to a power to control smoothness
-
-                    totalWeight += weight;
-                    interpolatedHeight += (float)weight * neighbor.Height;
-                }
-
-
-                interpolatedHeight = Math.Max(0.0f, minHeight + (float)(interpolatedHeight / totalWeight));
-
-                // Adjust the interpolated height based on the closest node and maxSlope if needed
-                // ...
-
-                heightmap[x, y] = interpolatedHeight;
-            }
-        }
-
-        // Second pass: adjust the height values based on the maxSlope constraint
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                float currentHeight = heightmap[x, y];
-
-                if (currentHeight == 0) continue;
-
-                // Iterate through the 8 neighboring pixels
-                for (int dy = -1; dy <= 1; dy++)
-                {
-                    for (int dx = -1; dx <= 1; dx++)
-                    {
-                        if (dx == 0 && dy == 0) continue;
-
-                        int nx = x + dx;
-                        int ny = y + dy;
-
-                        // Check if the neighboring pixel is within the bounds of the heightmap
-                        if (nx >= 0 && nx < width && ny >= 0 && ny < height)
-                        {
-                            float neighborHeight = heightmap[nx, ny];
-                            float heightDifference = Math.Abs(currentHeight - neighborHeight);
-
-                            // Check if the height difference exceeds the maxSlope constraint
-                            if (heightDifference > maxSlope)
-                            {
-                                float adjustedHeightDifference = maxSlope * (heightDifference / maxSlope);
-                                if (currentHeight > neighborHeight)
-                                {
-                                    heightmap[nx, ny] = currentHeight - adjustedHeightDifference;
-                                }
-                                else
-                                {
-                                    heightmap[x, y] = neighborHeight - adjustedHeightDifference;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     private void AddAdditionalNodesIfNeeded(List<DirectedNode> concaveExtraNodes, List<GraphNode> convexExtraNodes,
         List<Point> trailingPoints,
         int startIndex, int endIndex, int midIndex, int newNodePriority)
@@ -492,12 +348,7 @@ public class HydrologyMapGen
     //    int dy = y1 - y2;
     //    return Math.Sqrt(dx * dx + dy * dy);
     //}
-    static double Distance(Point p1, Point p2)
-    {
-        int dx = p1.X - p2.X;
-        int dy = p1.Y - p2.Y;
-        return Math.Sqrt(dx * dx + dy * dy);
-    }
+ 
 
 
     List<DirectedNode> SelectRandomBorderCoordsAsDirectedNodes(List<DirectedNode> borderCoords,
@@ -705,7 +556,7 @@ public class HydrologyMapGen
                 {
                     if (riverNode.Equals(drainNode)) continue;
 
-                    if (Distance(p, riverNode.Point) < parameters.MinDistanceBetweenRiverNodes)
+                    if (Point.Distance(p, riverNode.Point) < parameters.MinDistanceBetweenRiverNodes)
                     {
                         isTooClose = true;
                         break;
