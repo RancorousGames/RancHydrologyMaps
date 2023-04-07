@@ -21,7 +21,7 @@ public class HydrologyMapGen
     }
 
 
-    public HydrologyMap GenerateIsland(int width, int height, int seed, int k)
+    public HydrologyMap GenerateIsland(int width, int seed, int k)
     {
         if (seed == -1)
         {
@@ -32,10 +32,15 @@ public class HydrologyMapGen
         Random = new Random(seed);
 
 
-        float[,] heightmap = new float[width, height];
+        float[,] heightmap = new float[width, width];
 
-        HydrologyTerrainFormer.FillBaseHeightmap(heightmap, width, height, Random, parameters);
+        HydrologyTerrainFormer.FillBaseHeightmap(heightmap, width, Random, parameters);
 
+        
+      // return new HydrologyMap(heightmap, new List<DirectedNode>(), new List<RiverEdge>(), new GridCell[0, 0],
+      //     new List<GraphEdge>(),
+      //     new List<IGraphNode>());
+        
         (List<DirectedNode> riverMouthCandidates, List<GraphNode> extraVoronoiPoints) =
             GetRiverMouthCandidates(heightmap, parameters.SpaceBetweenRiverMouthCandidates);
 
@@ -68,22 +73,21 @@ public class HydrologyMapGen
 
         allRiverNodes.RemoveAll(x => x.Type == NodeType.Border);
 
-        GridCell[,] gridCells = new GridCell[width, height];
+        GridCell[,] gridCells = new GridCell[width, width];
 
 
         allRiverNodes.ForEach(x => hydrologyKdTree.Insert(x));
 
-        FindAreaForNodes(heightmap, hydrologyKdTree, allRiverNodes, width, height);
+        FindAreaForNodes(heightmap, hydrologyKdTree, allRiverNodes, width, width);
         // flowrate = 0.42 · A^0.69 formula from hydrology paper. Before this point FlowRate holds the number of pixels for which the closest node is this
         allRiverNodes.ForEach(n => n.FlowRate = 0.42 * Math.Pow(n.FlowRate, 0.69));
         riverMouthCandidates.ForEach(n => SetCumulativeFlowRate(n));
 
         GenerateRiverNodeHeights(riverMouthCandidates);
 
-        HydrologyTerrainFormer.InterpolateHeightMapSimple(heightmap, borderKdTree, allRiverNodes, width,
-          height, 10, 5f);
+        HydrologyTerrainFormer.InterpolateHeightMapSimple(heightmap, borderKdTree, allRiverNodes, width, 10, 5f);
 
-        HydrologyTerrainFormer.CarveRivers(heightmap, riverMouthCandidates/*.Skip(1).Take(1).ToList()*/, 1.2f, 0.2f, 0.3f, 1f, 8f);
+        HydrologyTerrainFormer.CarveRivers(heightmap, riverMouthCandidates/*.Skip(1).Take(1).ToList()*/, 0.5f, 0.35f, 0.3f, 1f, 8f);
 
         return new HydrologyMap(heightmap, allRiverNodes, riverEdges, gridCells, voronoiEdges, allPointsForVoronoi);
     }
@@ -202,6 +206,9 @@ public class HydrologyMapGen
                 concaveness++;
             }
 
+            currentPoint.X = Math.Clamp(currentPoint.X, 0, width);
+            currentPoint.Y = Math.Clamp(currentPoint.Y, 0, width);
+
             trailingPoints.Add(currentPoint);
 
             if (currentPoint == firstBorderPoint) break; // Stop when we are back where we started
@@ -232,7 +239,7 @@ public class HydrologyMapGen
 
             skipCounter = (skipCounter + 1) % skipCount;
 
-            bool Blocked(Point p) => heightmap[p.X, p.Y] > 0;
+            bool Blocked(Point p) => (p.X >= width || p.X < 0 || p.Y >= width || p.Y < 0) || heightmap[p.X, p.Y] > 0;
         }
 
 
@@ -547,7 +554,7 @@ public class HydrologyMapGen
             bool valid = false;
             var x = p.X;
             var y = p.Y;
-            if (x >= 0 && x < width && y >= 0 && heightmap[x, y] >= parameters.NodeExpansionMinHeight &&
+            if (x >= 0 && x < width && y >= 0 && y < width && heightmap[x, y] >= parameters.NodeExpansionMinHeight &&
                 y < height /* && 
                 heightmap[x, y] >= currentHeight*/)
             {

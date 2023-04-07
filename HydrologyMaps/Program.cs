@@ -8,12 +8,11 @@ public static class Program
 {
     public static void Main(string[] args)
     {
-        int width = 512;
-        int height = 512;
+        int width = 512; // only square heightmaps supported
 
         HydrologyParameters parameters = new HydrologyParameters();
-        parameters.SpaceBetweenRiverMouthCandidates = 65;
-        parameters.MinDistanceBetweenRiverNodes = 10;
+        parameters.SpaceBetweenRiverMouthCandidates = 100;
+        parameters.MinDistanceBetweenRiverNodes = 25;
         parameters.InterNodeDist = 15;
         parameters.NodeExpansionMaxTries = 10;
         parameters.MaxNodePriority = 10;
@@ -24,11 +23,11 @@ public static class Program
         HydrologyMapGen hydrologyMapGen = new HydrologyMapGen(parameters);
         HydrologyRenderer hydrologyMapRender = new HydrologyRenderer();
 
-        int seed = 1;
+        int seed = 1562471381;// 178145830;
         bool stepByStep = false;
         for (int i = 0; i < (seed == -1 || stepByStep ? 200 : 1); i++)
         {
-            var map = hydrologyMapGen.GenerateIsland(width, height, seed, (stepByStep ? i : 300));
+            var map = hydrologyMapGen.GenerateIsland(width, seed, (stepByStep ? i : 300));
 
             hydrologyMapRender.SaveMapAsPNG(map, "./heightmap.png", false, true,  true, finalHeightmapRender: true, parameters);
 
@@ -43,7 +42,7 @@ public static class Program
                 Process.Start(startInfo);
             }
 
-            Thread.Sleep(1000);
+            Thread.Sleep(300);
         }
     }
 }
