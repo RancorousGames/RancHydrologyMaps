@@ -1,4 +1,5 @@
 ﻿using System.Numerics;
+using RancHydrologyMaps;
 
 namespace HydrologyMaps;
 
@@ -258,15 +259,16 @@ public class HydrologyTerrainFormer
 
     public static void InterpolateHeightMapSimple(float[,] heightmap, HydrologyKdTree2D borderKdTree,
         List<DirectedNode> allNodes,
-        int width, int height, int numNeighbors, float maxSlope)
+        int width, int numNeighbors, float maxSlope)
     {
-        for (int y = 0; y < height; y++)
+        for (int y = 0; y < width; y++)
         {
             for (int x = 0; x < width; x++)
             {
                 if (heightmap[x, y] == 0) continue;
                 float dist = Math.Min(1,(float)Point.Distance(new Point(x, y), borderKdTree.FindClosest(x, y, 1).First().Point)/180);
-                heightmap[x, y] = heightmap[x, y] *dist * Math.Min(1, 0.7f + _noiseGenerator.GetNoise(x * 3, y * 3) * 0.3f);
+           //     heightmap[x, y] = heightmap[x, y] *dist * Math.Min(1, 0.7f + _noiseGenerator.GetNoise(x * 3, y * 3) * 0.3f);
+                heightmap[x, y] = dist*Math.Min(1, 0.7f + _noiseGenerator.GetNoise(x * 3, y * 3) * 0.3f);
             }
         }
     }
@@ -359,12 +361,12 @@ public class HydrologyTerrainFormer
         }
     }
 
-    public static void FillBaseHeightmap(float[,] heightmap, int width, int height, Random random, HydrologyParameters parameters)
+    public static void FillBaseHeightmap(float[,] heightmap, int width, Random random, HydrologyParameters parameters)
     {
         FastNoiseLite noiseGenerator = new FastNoiseLite();
-        noiseGenerator.SetNoiseType(FastNoiseLite.NoiseType.OpenSimplex2);
+        noiseGenerator.SetNoiseType(FastNoiseLite.NoiseType.Perlin);
         noiseGenerator.SetSeed(random.Next());
-        noiseGenerator.SetFrequency(0.003f);
+        noiseGenerator.SetFrequency(0.01f);
         noiseGenerator.SetFractalGain(0);
 
 
@@ -372,36 +374,39 @@ public class HydrologyTerrainFormer
 
         float beachWidth = parameters.BeachWidth;
 
-        for (int y = 0; y < height; y++)
+        for (int y = 0; y < width; y++)
         {
             for (int x = 0; x < width; x++)
             {
-                float radialGradient = GetRadialGradient(x, y, width, height);
+                float radialGradient = GetIslandFalloffFactor(x, y, width, parameters.IslandShapeChaos);
 
                 float perlinValue =
-                    (noiseGenerator.GetNoise(x, y) + 1f) * radialGradient /
-                    2f; // Normalize Perlin noise to the range [0, 1]
+                    (noiseGenerator.GetNoise(x, y) + 1) / 2 * radialGradient; // Normalize Perlin noise to the range [0, 1]
 
-                if (perlinValue < 0.2)
-                {
-                    if (perlinValue < 0.15)
+           //     if (perlinValue < 0.2)
+           //     {
+                    if (perlinValue < 0.8)
                     {
                         perlinValue = 0;
                     }
-                    else // if (x > beachWidth && x < width - beachWidth  && y > beachWidth && y < width - beachWidth)
+                    else
                     {
-                        bool isNearOcean = false;
+                        perlinValue = 1;
+                    }
+           //         else // if (x > beachWidth && x < width - beachWidth  && y > beachWidth && y < width - beachWidth)
+           //         {
+                /*        bool isNearOcean = false;
                         for (int yo = -(int)beachWidth; yo < beachWidth; yo++)
                         {
                             for (int xo = -(int)beachWidth; xo < beachWidth; xo++)
                             {
-                                float offsetRadialGradient = GetRadialGradient(x + xo, y + yo, width, height);
+                                float offsetRadialGradient = GetIslandFalloffFactor(x + xo, y + yo, width, parameters.IslandFalloffWidth);
                                 float offSetPerlinValue =
-                                    (noiseGenerator.GetNoise(x + xo, y + yo) + 1f) * offsetRadialGradient / 2f;
+                                    (noiseGenerator.GetNoise(x + xo, y + yo) + 1f) * offsetRadialGradient;
 
                                 if (offSetPerlinValue < 0.15)
                                 {
-                                    isNearOcean = true;
+                                   // isNearOcean = true;
                                     break;
                                 }
                             }
@@ -410,27 +415,46 @@ public class HydrologyTerrainFormer
                         }
 
                         if (isNearOcean) perlinValue = 0.1f;
-                    }
-                }
+           //         }*/
+            //    }
 
 
                 //  else if (perlinValue < 0.165) perlinValue = 0.15f;
                 //else perlinValue = 0.5f;
-                heightmap[x, y] = perlinValue;
+                heightmap[x, y] = Math.Min(1, perlinValue);
             }
 
-            
         }
+        
+        
+        HeightmapCleaner.RemoveArtifacts(heightmap, 50);
     }
     
-    static float GetRadialGradient(int x, int y, int width, int height)
+   //static float GetRadialGradient(int x, int y, int width, double falloffWidthFromEdge)
+   //{
+   //    float center = width / 2f;
+   //    
+   //    float distanceX = x - center;
+   //    float distanceY = y - center;
+   //    float distanceFromCenter = (float)Math.Sqrt(distanceX * distanceX + distanceY * distanceY);
+   //    float distanceFromEdge = width -  distanceFromCenter;
+   //    float falloffFactor = Math.Min(1f, distanceFromEdge / (width / 2.5f));
+   //    return distanceFromEdge > falloffWidthFromEdge ? 1 : falloffFactor;
+   //}
+    
+    
+    static float GetIslandFalloffFactor(int x, int y, int width, float islandShapeChaos)
     {
-        float centerX = width / 2f;
-        float centerY = height / 2f;
+        float center = width / 2f;
         
-        float distanceX = x - centerX;
-        float distanceY = y - centerY;
+        float distanceX = x - center;
+        float distanceY = y - center;
         float distanceToCenter = (float)Math.Sqrt(distanceX * distanceX + distanceY * distanceY);
-        return 1f - Math.Min(1f, distanceToCenter / (Math.Min(width, height) / 2.5f));
+        float distanceFromEdge = width / 2f -  distanceToCenter;
+        const float minDistFromWall = 3;
+        float chaos = 50 * islandShapeChaos;
+        float factor = (distanceFromEdge - minDistFromWall + chaos) / (minDistFromWall + chaos);
+
+        return factor; // (1f - Math.Min(1f, normalizedDistance)) / 2;
     }
 }

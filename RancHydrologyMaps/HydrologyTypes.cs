@@ -356,6 +356,8 @@ public class DirectedNode : GraphNode
     public DirectedNode(Point point, NodeType type, GraphNode? parent, Vector2 direction, int priority)
         : base(point, type, parent)
     {
+        if (point.X < 0 || point.Y < 0) throw new InvalidOperationException();
+        
         Point = point;
         Type = type;
         Direction = direction;
@@ -391,11 +393,13 @@ public struct HydrologyParameters
     public double MinAngleBetweenBranches = 60;
     public float BeachWidth = 5;
     public double ProperRiverMinimumFlowRate = 38;
+    public float IslandShapeChaos = 0.5f;
 
 
     public HydrologyParameters()
     {
     }
+
 }
 
 public struct GridCell
