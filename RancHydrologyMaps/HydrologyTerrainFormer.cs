@@ -10,7 +10,7 @@ public class HydrologyTerrainFormer
     public HydrologyTerrainFormer()
     {
         _noiseGenerator.SetNoiseType(FastNoiseLite.NoiseType.Perlin);
-        _noiseGenerator.SetFrequency(1.13f);
+        _noiseGenerator.SetFrequency(0.013f);
         _noiseGenerator.SetFractalGain(1);
     }
 
@@ -257,8 +257,7 @@ public class HydrologyTerrainFormer
         return start + (end - start) * t;
     }
 
-    public static void InterpolateHeightMapSimple(float[,] heightmap, HydrologyKdTree2D borderKdTree,
-        List<DirectedNode> allNodes,
+    public static void InterpolateHeightMapSimple(float[,] heightmap, KdTree<Point> borderGraphNodeKdTree,
         int width, int numNeighbors, float maxSlope)
     {
         for (int y = 0; y < width; y++)
@@ -266,16 +265,17 @@ public class HydrologyTerrainFormer
             for (int x = 0; x < width; x++)
             {
                 if (heightmap[x, y] == 0) continue;
-                float dist = Math.Min(1,(float)Point.Distance(new Point(x, y), borderKdTree.FindClosest(x, y, 1).First().Point)/180);
+                var closestBorderPoint = borderGraphNodeKdTree.FindClosest(x, y, 1).First();
+                float dist = Math.Min(1,(float)Point.Distance(new Point(x, y), new Point(closestBorderPoint.X, closestBorderPoint.Y))/180);
            //     heightmap[x, y] = heightmap[x, y] *dist * Math.Min(1, 0.7f + _noiseGenerator.GetNoise(x * 3, y * 3) * 0.3f);
-                heightmap[x, y] = dist*Math.Min(1, 0.7f + _noiseGenerator.GetNoise(x * 3, y * 3) * 0.3f);
+                heightmap[x, y] = dist*Math.Min(1, 0.7f + _noiseGenerator.GetNoise(x, y) * 0.3f);
             }
         }
     }
 
 
     // ========== Base heightmap formation ===========
-    public static void InterpolateHeightMap(float[,] heightmap, HydrologyKdTree2D kdTree, List<DirectedNode> allNodes,
+    public static void InterpolateHeightMap(float[,] heightmap, KdTree<GraphNode> graphNodeKdTree, List<DirectedNode> allNodes,
         int width, int height, int numNeighbors, float maxSlope)
     {
         // Iterate through the grid points
@@ -286,7 +286,7 @@ public class HydrologyTerrainFormer
                 if (heightmap[x, y] == 0) continue;
 
                 // Query k-d tree for k nearest neighbors
-                List<GraphNode> nearestNeighbors = kdTree.FindClosest(x, y, numNeighbors);
+                List<GraphNode> nearestNeighbors = graphNodeKdTree.FindClosest(x, y, numNeighbors);
 
                 // Calculate the interpolated height using IDW or other methods
                 float interpolatedHeight = 0;

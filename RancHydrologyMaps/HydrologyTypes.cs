@@ -389,7 +389,7 @@ public struct HydrologyParameters
     public double InterNodeDist = 11;
     public double InterNodeDistVar = 4;
     public int NodeExpansionMaxTries = 3;
-    public float NodeExpansionMinHeight = 0.101f;
+    public float NodeExpansionMinHeight = 0.051f;
     public double MinAngleBetweenBranches = 60;
     public float BeachWidth = 5;
     public double ProperRiverMinimumFlowRate = 38;

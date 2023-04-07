@@ -2,52 +2,56 @@
 
 namespace HydrologyMaps;
 
-public class HydrologyKdTree2D
+public class KdTree<T>
 {
     private class KdNode
     {
-        public GraphNode Point;
+        public T Point;
         public KdNode Left;
         public KdNode Right;
 
-        public KdNode(GraphNode point)
+        public KdNode(T point)
         {
             Point = point;
             Left = null;
             Right = null;
         }
     }
-    
-    private class ComparableGraphNode : IComparable<ComparableGraphNode>
+
+    private class ComparableItem : IComparable<ComparableItem>
     {
-        public GraphNode Node { get; }
+        public T Item { get; }
         public int Distance { get; set; }
 
-        public ComparableGraphNode(GraphNode node, int distance)
+        public ComparableItem(T item, int distance)
         {
-            Node = node;
+            Item = item;
             Distance = distance;
         }
 
-        public int CompareTo(ComparableGraphNode other)
+        public int CompareTo(ComparableItem other)
         {
             return Distance.CompareTo(other.Distance);
         }
     }
 
     private KdNode root;
+    private readonly Func<T, int> _getX;
+    private readonly Func<T, int> _getY;
 
-    public HydrologyKdTree2D()
+    public KdTree(Func<T, int> getX, Func<T, int> getY)
     {
         root = null;
+        _getX = getX;
+        _getY = getY;
     }
 
-    public void Insert(GraphNode point)
+    public void Insert(T point)
     {
         root = InsertRecursively(root, point, 0);
     }
 
-    private KdNode InsertRecursively(KdNode currentNode, GraphNode point, int depth)
+    private KdNode InsertRecursively(KdNode currentNode, T point, int depth)
     {
         if (currentNode == null)
         {
@@ -57,7 +61,7 @@ public class HydrologyKdTree2D
         int currentDimension = depth % 2;
         if (currentDimension == 0)
         {
-            if (point.X < currentNode.Point.X)
+            if (_getX(point) < _getX(currentNode.Point))
             {
                 currentNode.Left = InsertRecursively(currentNode.Left, point, depth + 1);
             }
@@ -68,7 +72,7 @@ public class HydrologyKdTree2D
         }
         else
         {
-            if (point.Y < currentNode.Point.Y)
+            if (_getY(point) < _getY(currentNode.Point))
             {
                 currentNode.Left = InsertRecursively(currentNode.Left, point, depth + 1);
             }
@@ -81,20 +85,30 @@ public class HydrologyKdTree2D
         return currentNode;
     }
 
-    public List<GraphNode> FindClosest(int x, int y, int n)
+    private int DistanceSquared(T a, int X, int Y)
     {
-        var nearestNodes = new PriorityQueue<ComparableGraphNode>(n, Comparer<ComparableGraphNode>.Create((a, b) => b.Distance - a.Distance));
-        FindClosestRecursively(root, x, y, 0, nearestNodes, n);
-        return nearestNodes.Select(item => item.Node).ToList();
+        int deltaX = _getX(a) - X;
+        int deltaY = _getY(a) - Y;
+        return deltaX * deltaX + deltaY * deltaY;
     }
-    
-  // public GraphNode FindClosest(int x, int y)
-  // {
-  //     return FindClosestRecursively(root, x, y, 0).Point;
-  // }
 
-  
-    private void FindClosestRecursively(KdNode currentNode, int X, int Y, int depth, PriorityQueue<ComparableGraphNode> nearestNodes, int n)
+    public List<T> FindClosest(int x, int y, int n)
+    {
+        var nearestNodes =
+            new PriorityQueue<ComparableItem>(n,
+                Comparer<ComparableItem>.Create((a, b) => b.Distance - a.Distance));
+        FindClosestRecursively(root, x, y, 0, nearestNodes, n);
+        return nearestNodes.Select(item => item.Item).ToList();
+    }
+
+// public T FindClosest(int x, int y)
+// {
+//     return FindClosestRecursively(root, x, y, 0).Point;
+// }
+
+
+    private void FindClosestRecursively(KdNode currentNode, int X, int Y, int depth,
+        PriorityQueue<ComparableItem> nearestNodes, int n)
     {
         if (currentNode == null)
         {
@@ -105,7 +119,7 @@ public class HydrologyKdTree2D
         KdNode nextNode = null;
         KdNode otherNode = null;
 
-        if ((currentDimension == 0 && X < currentNode.Point.X) || (currentDimension == 1 && Y < currentNode.Point.Y))
+        if ((currentDimension == 0 && X < _getX(currentNode.Point)) || (currentDimension == 1 && Y < _getY(currentNode.Point)))
         {
             nextNode = currentNode.Left;
             otherNode = currentNode.Right;
@@ -125,29 +139,24 @@ public class HydrologyKdTree2D
             {
                 nearestNodes.Poll();
             }
-            nearestNodes.Add(new ComparableGraphNode(currentNode.Point, distToCurrentNode));
+
+            nearestNodes.Add(new ComparableItem(currentNode.Point, distToCurrentNode));
         }
 
         int distToSplittingPlane = 0;
         if (currentDimension == 0)
         {
-            distToSplittingPlane = X - currentNode.Point.X;
+            distToSplittingPlane = X -  _getX(currentNode.Point);
         }
         else
         {
-            distToSplittingPlane = Y - currentNode.Point.Y;
+            distToSplittingPlane = Y -  _getY(currentNode.Point);
         }
 
-        if (nearestNodes.Count() < n || distToSplittingPlane * distToSplittingPlane < DistanceSquared(nearestNodes.Peek().Node, X, Y))
+        if (nearestNodes.Count() < n ||
+            distToSplittingPlane * distToSplittingPlane < DistanceSquared(nearestNodes.Peek().Item, X, Y))
         {
             FindClosestRecursively(otherNode, X, Y, depth + 1, nearestNodes, n);
         }
-    }
-
-    private int DistanceSquared(GraphNode a, int X, int Y)
-    {
-        int deltaX = a.X - X;
-        int deltaY = a.Y - Y;
-        return deltaX * deltaX + deltaY * deltaY;
     }
 }
