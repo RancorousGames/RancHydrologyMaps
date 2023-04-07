@@ -23,7 +23,7 @@ public static class Program
         HydrologyMapGen hydrologyMapGen = new HydrologyMapGen(parameters);
         HydrologyRenderer hydrologyMapRender = new HydrologyRenderer();
 
-        int seed = 1562471381;// 178145830;
+        int seed = 1;// 1562471381;// 178145830;
         bool stepByStep = false;
         for (int i = 0; i < (seed == -1 || stepByStep ? 200 : 1); i++)
         {
