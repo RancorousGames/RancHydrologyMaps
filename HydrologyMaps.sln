@@ -4,6 +4,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HydrologyMaps", "HydrologyM
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HydrologyTest", "HydrologyTest\HydrologyTest.csproj", "{F7087E6E-742C-4BE2-836F-BA17044408A6}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RancHydrologyMaps", "RancHydrologyMaps\RancHydrologyMaps.csproj", "{250E9421-8D21-4309-9DFF-2277B7F310FB}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -18,5 +20,9 @@ Global
 		{F7087E6E-742C-4BE2-836F-BA17044408A6}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F7087E6E-742C-4BE2-836F-BA17044408A6}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F7087E6E-742C-4BE2-836F-BA17044408A6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{250E9421-8D21-4309-9DFF-2277B7F310FB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{250E9421-8D21-4309-9DFF-2277B7F310FB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{250E9421-8D21-4309-9DFF-2277B7F310FB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{250E9421-8D21-4309-9DFF-2277B7F310FB}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
