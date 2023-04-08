@@ -1,14 +1,19 @@
 ﻿using System.Drawing;
 using System.Drawing.Imaging;
+using RancHydrologyMaps;
 
 namespace HydrologyMaps;
 
-public class HydrologyRenderer
+// Used for drawing heightmap and meta-data (such as nodes and edges) to a png
+public static class HydrologyRenderer
 {
-    public void SaveMapAsPNG(HydrologyMap map, string outputPath, bool renderVoronoi, bool renderExtraPoints,
+    public static void SaveMapAsPNG(HydrologyMap map,
+        string outputPath,
+        bool renderVoronoi,
+        bool renderExtraPoints,
         bool drawRiverEdges,
-        bool finalHeightmapRender,
-        HydrologyParameters parameters)
+        bool finalHeightmapRender // if true will not draw any meta-information regardless of other arguments
+    )
     {
         var heightmap = map.HeightMap;
         int width = heightmap.GetLength(0);
@@ -22,26 +27,12 @@ public class HydrologyRenderer
                 for (int x = 0; x < width; x++)
                 {
                     int grayValue = (int)(heightmap[x, y] * 255);
-                   bitmap.SetPixel(x, y, Color.FromArgb(grayValue, grayValue, grayValue));
-
-               //    if (heightmap[x, y] == 0)
-               //    {
-               //        bitmap.SetPixel(x, y, Color.Black);
-               //        continue;
-               //    }
-               //    
-               //    var cell = map.GridCells[x, y];
-               //    var val = Math.Max(0, cell.NearestNode.FlowRate - cell.DistToNode * 3);
-
-
-               //    int col = Math.Max(0, (int)(255 - val * 3));
-               //    bitmap.SetPixel(x, y, Color.FromArgb(col,col,col));
+                    bitmap.SetPixel(x, y, Color.FromArgb(grayValue, grayValue, grayValue));
                 }
             }
 
             if (!finalHeightmapRender)
             {
-
                 if (renderVoronoi)
                 {
                     foreach (var edge in map.VoronoiEdges)
@@ -62,7 +53,6 @@ public class HydrologyRenderer
                     }
                 }
 
-
                 if (renderExtraPoints)
                 {
                     foreach (var voronoiNode in map.VoronoiNodes)
@@ -70,7 +60,6 @@ public class HydrologyRenderer
                         bitmap.SetPixel(voronoiNode.Point.X, voronoiNode.Point.Y, Color.Fuchsia);
                     }
                 }
-
 
                 foreach (var riverNode in map.AllRiverNodes)
                 {

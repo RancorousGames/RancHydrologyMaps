@@ -94,6 +94,14 @@ public class Point
         return new Point((int)vector.X, (int)vector.Y);
     }
 
+    
+    public static Vector2 GetVectorBetweenPoints(Point point1, Point point2)
+    {
+        float x = point1.X - point2.X;
+        float y = point1.Y - point2.Y;
+        return new Vector2(x, y);
+    }
+    
     public static double Distance(Point p1, Point p2)
     {
         int dx = p1.X - p2.X;
@@ -343,6 +351,8 @@ public class GraphNode : IGraphNode
 
     public double[] Position { get; set; }
     public Vector2 PositionVector => new Vector2(X, Y);
+    
+    // This is meant to support generating a realistic heightmap FROM the river nodes but currently we simply put the river nodes ON a realistic heightmap tso this height calculation is not currently useful
     public float Height { get; set; }
 }
 
@@ -392,8 +402,13 @@ public struct HydrologyParameters
     public float NodeExpansionMinHeight = 0.051f;
     public double MinAngleBetweenBranches = 60;
     public float BeachWidth = 5;
+    public float BaseRiverWidth = 0.6f; // base width in pixels, is multiplied by flow
+    public float RiverCarveDepth = 0.35f;
+    public float RiverCarveBankSlope = 0.1f; // determines how sharply the banks of rivers slope
+    public float RiverCarveFlowWidthInfluence = 8f; // Value determining how much flow should increase the width of a river
     public double ProperRiverMinimumFlowRate = 38;
     public float IslandShapeChaos = 0.5f;
+    public bool CalculateVoronoi = false;
 
 
     public HydrologyParameters()
@@ -402,6 +417,7 @@ public struct HydrologyParameters
 
 }
 
+// A data structure that was meant to hold metadata for each pixel, not currently used but might be useful in the future.
 public struct GridCell
 {
     public DirectedNode NearestNode;
@@ -412,7 +428,7 @@ public class HydrologyMap
 {
     public HydrologyMap(float[,] heightMap, List<DirectedNode> allRiverNodes, List<RiverEdge> riverEdges,
         GridCell[,] gridCells,
-        List<GraphEdge> voronoiEdges, List<IGraphNode> voronoiNodes)
+        List<GraphEdge>? voronoiEdges, List<IGraphNode>? voronoiNodes)
     {
         HeightMap = heightMap;
         RiverEdges = riverEdges;
@@ -425,7 +441,7 @@ public class HydrologyMap
     public float[,] HeightMap { get; }
     public List<RiverEdge> RiverEdges { get; }
     public GridCell[,] GridCells { get; }
-    public List<GraphEdge> VoronoiEdges { get; }
-    public List<IGraphNode> VoronoiNodes { get; }
+    public List<GraphEdge>? VoronoiEdges { get; }
+    public List<IGraphNode>? VoronoiNodes { get; }
     public List<DirectedNode> AllRiverNodes { get; }
 }

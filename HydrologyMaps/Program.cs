@@ -1,12 +1,13 @@
 ﻿// See https://aka.ms/new-console-template for more information
 
 using System.Diagnostics;
+using RancHydrologyMaps;
 
 namespace HydrologyMaps;
 
 public static class Program
 {
-    public static void Main(string[] args)
+    public static void Main(string[] _)
     {
         int width = 512; // only square heightmaps supported
 
@@ -16,33 +17,34 @@ public static class Program
         parameters.InterNodeDist = 15;
         parameters.NodeExpansionMaxTries = 10;
         parameters.MaxNodePriority = 10;
-        parameters.ContinueProbability = 0.1;
         parameters.MinAngleBetweenBranches = 40;
-        parameters.AsymmetricBranchProbability = 0.3;
-        parameters.SymmetricBranchProbability = 0.6;
+        parameters.ContinueProbability = 0.9;
+        parameters.AsymmetricBranchProbability = 0.05;
+        parameters.SymmetricBranchProbability = 0.05;
+        parameters.IslandShapeChaos = 1.1f;
         HydrologyMapGen hydrologyMapGen = new HydrologyMapGen(parameters);
-        HydrologyRenderer hydrologyMapRender = new HydrologyRenderer();
 
-        int seed = 1;// 1562471381;// 178145830;
+        int
+            seed = 729029907; // If seed is -1 then a random map is generated AND the program will continuously loop through maps
         bool stepByStep = false;
+        bool saveMultipleFiles = false;
         for (int i = 0; i < (seed == -1 || stepByStep ? 200 : 1); i++)
         {
             var map = hydrologyMapGen.GenerateIsland(width, seed, (stepByStep ? i : 300));
 
-            hydrologyMapRender.SaveMapAsPNG(map, "./heightmap.png", false, true,  true, finalHeightmapRender: true, parameters);
+            string filename = "./heightmap" + (saveMultipleFiles ? i : "") + ".png";
+            HydrologyRenderer.SaveMapAsPNG(map, filename, 
+                false, true, true, true);
 
-            // open heightmap
-            var ps =  Process.GetProcesses();
-
-            var ps1 = ps.Where(x => x.ProcessName.Contains("mage") || x.ProcessName.Contains("heightmap")).ToList();
-            
-            if (!Process.GetProcessesByName("ImageGlass").Any())
+            // open heightmap in preferred image viewer if not already open
+            string preferredImageViewer = "ImageGlass";
+            if (!Process.GetProcessesByName(preferredImageViewer).Any())
             {
                 ProcessStartInfo startInfo = new ProcessStartInfo("cmd.exe", "/C start \"\" ./heightmap.png");
                 Process.Start(startInfo);
             }
 
-            Thread.Sleep(300);
+            Thread.Sleep(1000);
         }
     }
 }

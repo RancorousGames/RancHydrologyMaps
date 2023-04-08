@@ -16,13 +16,13 @@ public class HydrologyTerrainFormer
 
 
     public static void CarveRivers(float[,] heightMap, List<DirectedNode> riverRoots, float baseRiverWidth,
-        float riverDepth, float smoothness, float falloff, float flowRateInfluence)
+        float riverDepth, float falloff, float flowRateInfluence)
     {
         float[,] accumulatedDepthMap = new float[heightMap.GetLength(0), heightMap.GetLength(1)];
 
         foreach (var root in riverRoots)
         {
-            AccumulateRiverSegmentsBFS(accumulatedDepthMap, root, baseRiverWidth, riverDepth, smoothness, falloff,
+            AccumulateRiverSegmentsBFS(accumulatedDepthMap, root, baseRiverWidth, riverDepth, falloff,
                 flowRateInfluence);
         }
 
@@ -30,7 +30,7 @@ public class HydrologyTerrainFormer
     }
 
     private static void AccumulateRiverSegmentsBFS(float[,] accumulatedDepthMap, DirectedNode root,
-        float baseRiverWidth, float riverDepth, float smoothness, float falloff, float flowRateInfluence)
+        float baseRiverWidth, float riverDepth, float falloff, float flowRateInfluence)
     {
         Queue<DirectedNode> queue = new Queue<DirectedNode>();
         queue.Enqueue(root);
@@ -361,7 +361,7 @@ public class HydrologyTerrainFormer
         }
     }
 
-    public static void FillBaseHeightmap(float[,] heightmap, int width, Random random, HydrologyParameters parameters)
+    public static void GetBaseHeightmapMask(float[,] heightmap, int width, Random random, HydrologyParameters parameters)
     {
         FastNoiseLite noiseGenerator = new FastNoiseLite();
         noiseGenerator.SetNoiseType(FastNoiseLite.NoiseType.Perlin);
@@ -426,8 +426,8 @@ public class HydrologyTerrainFormer
 
         }
         
-        
-        HeightmapCleaner.RemoveArtifacts(heightmap, 50);
+        // maxDiameterOfArtifacts, higher value is more certain to remove artifacts but increases computation time of the algorithm
+        HeightmapCleaner.RemoveArtifacts(heightmap, maxDiameterOfArtifacts: 100);
     }
     
    //static float GetRadialGradient(int x, int y, int width, double falloffWidthFromEdge)

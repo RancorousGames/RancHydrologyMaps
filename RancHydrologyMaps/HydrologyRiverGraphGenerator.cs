@@ -5,53 +5,28 @@ using Point = HydrologyMaps.Point;
 
 namespace RancHydrologyMaps;
 
-public class HydrologyRiverGraph
+// responsible for generating the graph of rivers given a heightmap without rivers or lakes
+public class HydrologyRiverGraphGenerator
 {
     private readonly HydrologyParameters _parameters;
     private readonly Random _random;
 
-    public HydrologyRiverGraph(HydrologyParameters parameters, Random random)
+    public HydrologyRiverGraphGenerator(HydrologyParameters parameters, Random random)
     {
         _parameters = parameters;
         _random = random;
     }
 
-    public double SetCumulativeFlowRate(DirectedNode node)
-    {
-        if (node.Children.Count > 0)
-            node.FlowRate = node.Children.Sum(n => SetCumulativeFlowRate((DirectedNode)n));
-        return node.FlowRate;
-    }
-
-    public void GenerateRiverNodeHeights(List<DirectedNode> riverMouthCandidates)
-    {
-        riverMouthCandidates.ForEach(n => GenerateRiverNodeHeightsRecursive(n, 0));
-
-        void GenerateRiverNodeHeightsRecursive(DirectedNode node, float height)
-        {
-            node.Height = height;
-            if (node.Children.Count > 0)
-            {
-                float newHeight = node.FlowRate > _parameters.ProperRiverMinimumFlowRate
-                    ? 0
-                    : Math.Min(1, height + 0.1f * (float)_random.NextDouble());
-                node.Children.ForEach(
-                    n => GenerateRiverNodeHeightsRecursive((DirectedNode)n, newHeight));
-            }
-        }
-    }
-
-
+    // Find potential points along the border of a shape that could become river mouths. We simply take every n'th border point and call it a mouth where n is skipCount
     public (List<DirectedNode> borderCoordinates, List<GraphNode> extraVoronoiPoints)
         GetRiverMouthCandidates(float[,] heightmap, int skipCount, KdTree<Point> allBorderPointKdTree)
     {
-        // Initialize variables
         int width = heightmap.GetLength(0);
         int height = heightmap.GetLength(1);
         List<DirectedNode> borderCoordinates = new List<DirectedNode>();
         List<GraphNode> extraVoronoiPoints = new List<GraphNode>();
 
-        // Find a border point by doing a quick scan through the middle of the heightmap
+        // Find the first border point by doing a quick scan through the middle of the heightmap
         Point firstBorderPoint = new Point(-1, -1);
         for (int x = 0; x < width; x++)
         {
@@ -67,33 +42,33 @@ public class HydrologyRiverGraph
             return (borderCoordinates, extraVoronoiPoints); // Return empty lists if no border point is found
         }
 
-        // Crawl over boundary of shape to find border coordinates, adding every skipCount to a list as DirectedNode objects
-
+        // Crawl over boundary of the shape to find border coordinates, adding every skipCount coordinate to a list as DirectedNode river mouth objects
         Point currentPoint = firstBorderPoint;
+
+        // A vector pointing towards the ocean for each node, currently just pointing in an approximate not very precise direction
         Vector2 oceanDirection = new Vector2(-1, 0);
 
-        var facing = new Point(0, -1); // up
-
-        int concaveness = 0; // negative value means we are turning left more and in a concave
-
-        Point lastAddedNode = Point.Zero;
 
         // saving the last skipCount borderPoints used for detecting concaves and adding additional nodes
         int trailingPointCount = skipCount;
         List<Point> trailingPoints = new List<Point>(trailingPointCount);
 
+        // Used for the crawling algorithm
+        var facing = new Point(0, -1); // up
+
         int i = 0;
         while (true)
         {
-            /*
+            /* Crawling algorithm, "wall" means land here.
+                4 rules for crawling the outline of the shape:
                 ↑ ▮   ▮▮         ▮
                 | ▮    ↰▮   ⮣▮   ⮣▮ 
                 1       2     3    4
                 If there's a wall ahead on the right and no wall blocking the path, move forward one cell (1).
                 If there's a wall ahead on the right and a wall blocking the path, add a point and turn left (2).
                 Otherwise add a point and turn right (3) (also covers 4)
-                Note that Y = 0 is the top
-                Note that we do point math as if we are crawling in the wall, not on the space next to it is changed a bit
+                Note that lower Y value means up
+                Note that we do point math as if we are crawling in/on the wall, not on the space next to it
              */
 
             Point left = new Point(facing.Y, -facing.X);
@@ -109,7 +84,6 @@ public class HydrologyRiverGraph
                     Point leftBack = left - facing;
                     facing = left;
                     oceanDirection = new Vector2(leftBack.X, leftBack.Y);
-                    concaveness--;
                 }
                 else
                 {
@@ -124,7 +98,6 @@ public class HydrologyRiverGraph
                 currentPoint += right;
                 facing = right;
                 oceanDirection = new Vector2(left.X, left.Y);
-                concaveness++;
             }
 
             currentPoint.X = Math.Clamp(currentPoint.X, 0, width);
@@ -137,7 +110,7 @@ public class HydrologyRiverGraph
 
             if (currentPoint == firstBorderPoint) break; // Stop when we are back where we started
 
-
+            // check if we need to add another potential river point for convex parts of the graph since we want higher chance of rivers here
             if (i % skipCount == 0)
             {
                 // First we need to check if we want to add any additional additional nodes before current to cover concave shape
@@ -153,11 +126,9 @@ public class HydrologyRiverGraph
                 }
 
                 //  var riverNodePoint = new Point(currentPoint.X - (int)oceanDirection.X*2, currentPoint.Y- (int)oceanDirection.Y*2);
-                concaveness = 0;
                 oceanDirection /= oceanDirection.Length(); // normalize
                 borderCoordinates.Add(new DirectedNode(currentPoint, NodeType.Border, null, oceanDirection,
                     _random.Next(_parameters.MaxNodePriority, _parameters.MaxNodePriority)));
-                lastAddedNode = currentPoint;
                 trailingPoints.Clear();
             }
 
@@ -178,25 +149,7 @@ public class HydrologyRiverGraph
         return (borderCoordinates, extraVoronoiPoints);
     }
 
-
-    public void FindAreaForNodes(float[,] heightmap, KdTree<GraphNode> graphNodeKdTree,
-        List<DirectedNode> allNodes, int width,
-        int height)
-    {
-        // Iterate through the grid points
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                if (heightmap[x, y] == 0) continue;
-
-                // Add this pixel to the area of the closest rivernode (FlowRate is used for area at this point)
-                List<GraphNode> nearestNeighbors = graphNodeKdTree.FindClosest(x, y, 1);
-                ((DirectedNode)nearestNeighbors.First()).FlowRate++;
-            }
-        }
-    }
-
+    //Check if we want to add any additional additional nodes before current to cover concave shape
     private void AddAdditionalNodesIfNeeded(List<DirectedNode> concaveExtraNodes, List<GraphNode> convexExtraNodes,
         List<Point> trailingPoints,
         int startIndex, int endIndex, int midIndex, int newNodePriority)
@@ -223,22 +176,26 @@ public class HydrologyRiverGraph
         }
     }
 
+    // Continue to add more river nodes based on the river-mouths until we have created a full river graph
     public (List<DirectedNode>, List<RiverEdge>) ExpandRiverGrid(
         float[,] heightmap,
-        List<DirectedNode> riverMouthCandidates, int k)
+        List<DirectedNode> riverMouthCandidates, 
+        int stepIndex // Step value is used for showing step-by-step progress of the river graph building, default to 1 for not showing any intermediate steps
+        )
     {
         List<DirectedNode> riverGrid = new List<DirectedNode>();
         List<RiverEdge> riverEdges = new List<RiverEdge>();
 
         PriorityQueue<DirectedNode, int> riverExpandQueue = new();
-        //Queue<DirectedNode> riverNodes = new Queue<DirectedNode>();
+
         riverMouthCandidates.ForEach(n =>
         {
             riverExpandQueue.Enqueue(n, _parameters.MaxNodePriority - n.Priority);
             riverGrid.Add(n);
         });
 
-        for (int i = 0; i < k; i++)
+        // Keep taking the highest priority node from the queue and try to expand that river node further
+        for (int i = 0; i < stepIndex; i++)
         {
             var node = riverExpandQueue.Dequeue();
             List<DirectedNode> newRiverNodes =
@@ -252,29 +209,13 @@ public class HydrologyRiverGraph
                 riverEdges.Add(new RiverEdge(node, newDirectedNode, newDirectedNode.Priority));
             }
 
-
             if (riverExpandQueue.Count == 0) break;
         }
 
         return (riverGrid, riverEdges);
     }
-
-    // Calculate distance between two coordinates
-    static double Distance(IGraphNode coord1, IGraphNode coord2)
-    {
-        int dx = coord1.Point.X - coord2.Point.X;
-        int dy = coord1.Point.Y - coord2.Point.Y;
-        return Math.Sqrt(dx * dx + dy * dy);
-    }
-
-    public static Vector2 GetVectorFromPoints(Point point1, Point point2)
-    {
-        float x = (float)point1.X - (float)point2.X;
-        float y = (float)point1.Y - (float)point2.Y;
-        return new Vector2(x, y);
-    }
-
-
+    
+    // Try to expand a rivernode further
     List<DirectedNode> ContinueRiver(float[,] heightmap, DirectedNode drainNode,
         List<DirectedNode> riverNodes, List<RiverEdge> riverEdgesSoFar)
     {
@@ -298,12 +239,13 @@ public class HydrologyRiverGraph
         }
         else if (nextActionSelector < _parameters.ContinueProbability + _parameters.AsymmetricBranchProbability)
         {
-            action = RiverAction.AsymmetricBranch;
+            // asymmetric branches has the main river continue with the same width/priority and a smaller offshoot
+            action = RiverAction.AsymmetricBranch; 
             branch2Priority = _random.Next(1, drainNode.Priority - 1);
         }
         else
         {
-            action = RiverAction.SymmetricBranch;
+            action = RiverAction.SymmetricBranch; 
             branch1Priority = drainNode.Priority - 1;
             branch2Priority = drainNode.Priority - 1;
         }
@@ -316,7 +258,7 @@ public class HydrologyRiverGraph
                                   _parameters.InterNodeDistVar;
 
 
-        double angleBetweenBranches = RandomInRange( _parameters.MinAngleBetweenBranches, 170);
+        double angleBetweenBranches = RandomInRange(_parameters.MinAngleBetweenBranches, 170);
 
         double angle1 = action == RiverAction.Continue
             ? RandomInRange(-90, 90)
@@ -335,7 +277,7 @@ public class HydrologyRiverGraph
             if (ValidateNewPoint(newPoint, riverEdgesSoFar))
             {
                 newNodes.Add(new DirectedNode(newPoint, NodeType.River, drainNode,
-                    GetVectorFromPoints(newPoint, drainNode.Point), Math.Max(1, branch1Priority)));
+                    Point.GetVectorBetweenPoints(newPoint, drainNode.Point), Math.Max(1, branch1Priority)));
                 break;
             }
 
@@ -355,7 +297,7 @@ public class HydrologyRiverGraph
 
         if (action != RiverAction.Continue)
         {
-            double _randomDistance2 = _parameters.InterNodeDist +
+            double randomDistance2 = _parameters.InterNodeDist +
                                       _random.NextDouble() * _parameters.InterNodeDistVar * 2 -
                                       _parameters.InterNodeDistVar;
 
@@ -368,19 +310,19 @@ public class HydrologyRiverGraph
                 double angle2Rad = (angle1 + angleBetweenBranches) * (Math.PI / 180);
 
                 newPoint = new(
-                    drainNode.X + (int)(directionVector.X * _randomDistance2 * Math.Cos(angle2Rad) -
-                                        directionVector.Y * _randomDistance2 * Math.Sin(angle2Rad)),
-                    drainNode.Y + (int)(directionVector.X * _randomDistance2 * Math.Sin(angle2Rad) +
-                                        directionVector.Y * _randomDistance2 * Math.Cos(angle2Rad)));
+                    drainNode.X + (int)(directionVector.X * randomDistance2 * Math.Cos(angle2Rad) -
+                                        directionVector.Y * randomDistance2 * Math.Sin(angle2Rad)),
+                    drainNode.Y + (int)(directionVector.X * randomDistance2 * Math.Sin(angle2Rad) +
+                                        directionVector.Y * randomDistance2 * Math.Cos(angle2Rad)));
 
                 if (ValidateNewPoint(newPoint, riverEdgesSoFar))
                 {
                     newNodes.Add(new DirectedNode(newPoint, NodeType.River, drainNode,
-                        GetVectorFromPoints(newPoint, drainNode.Point), branch2Priority));
+                        Point.GetVectorBetweenPoints(newPoint, drainNode.Point), branch2Priority));
                     break;
                 }
 
-                _randomDistance2 = _parameters.InterNodeDist + _random.NextDouble() * _parameters.InterNodeDistVar * 2 -
+                randomDistance2 = _parameters.InterNodeDist + _random.NextDouble() * _parameters.InterNodeDistVar * 2 -
                                    _parameters.InterNodeDistVar;
 
                 angleBetweenBranches = RandomInRange(_parameters.MinAngleBetweenBranches, 90);
@@ -396,6 +338,7 @@ public class HydrologyRiverGraph
         }
 
 
+        // Points should be far enough from other rivernodes and should fill certain height requirements
         bool ValidateNewPoint(Point p, List<RiverEdge> edgesSoFar)
         {
             bool valid = false;
@@ -404,9 +347,9 @@ public class HydrologyRiverGraph
 
             bool validCoordinate = x >= 0 && x < width && y >= 0 && y < width;
             float pHeight = validCoordinate ? heightmap[x, y] : 0;
-            if (validCoordinate && 
-                pHeight  >= _parameters.NodeExpansionMinHeight &&
-                pHeight > currentHeight - 0.06f && 
+            if (validCoordinate &&
+                pHeight >= _parameters.NodeExpansionMinHeight &&
+                pHeight > currentHeight - 0.06f &&
                 (pHeight > _parameters.NodeExpansionMinHeight * 3 || pHeight > currentHeight))
             {
                 bool isTooClose = false;
@@ -442,6 +385,56 @@ public class HydrologyRiverGraph
             }
 
             return valid;
+        }
+    }
+
+    public void FindFlowRateForAllNodes(float[,] heightmap, KdTree<GraphNode> graphNodeKdTree, int width,
+        List<DirectedNode> allNodes)
+    {
+        // Iterate through the grid points
+        for (int y = 0; y < width; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                if (heightmap[x, y] == 0) continue;
+
+                // Add this pixel to the area of the closest rivernode (FlowRate is used for area at this point)
+                List<GraphNode> nearestNeighbors = graphNodeKdTree.FindClosest(x, y, 1);
+                ((DirectedNode)nearestNeighbors.First()).FlowRate++;
+            }
+        }
+
+        // flowrate = 0.42 · A^0.69 formula from hydrology paper. Before this point FlowRate holds the number of pixels for which the closest node is this
+        allNodes.ForEach(n => n.FlowRate = 0.42 * Math.Pow(n.FlowRate, 0.69));
+
+        allNodes.ForEach(n => SetCumulativeFlowRate(n));
+    }
+
+
+    // For a given river-node, find the combined flow amount of all its children and assign it to node.FlowRate (before this node.FlowRate is assumed to hold a number representing the area that drains into that node)
+    private double SetCumulativeFlowRate(DirectedNode node)
+    {
+        if (node.Children.Count > 0)
+            node.FlowRate = node.Children.Sum(n => SetCumulativeFlowRate((DirectedNode)n));
+        return node.FlowRate;
+    }
+
+    // For a given river-node, set the height of each node to a random number that is greater than it's parent. This is meant to support generating a realistic heightmap FROM the river nodes but currently we simply put the river nodes ON a realistic heightmap tso this height calculation is not currently useful
+    public void GenerateRiverNodeHeights(List<DirectedNode> riverMouthCandidates)
+    {
+        riverMouthCandidates.ForEach(n => GenerateRiverNodeHeightsRecursive(n, 0));
+
+        void GenerateRiverNodeHeightsRecursive(DirectedNode node, float height)
+        {
+            node.Height = height;
+            if (node.Children.Count > 0)
+            {
+                float newHeight = node.FlowRate > _parameters.ProperRiverMinimumFlowRate
+                    ? 0
+                    : Math.Min(1, height + 0.1f * (float)_random.NextDouble());
+                node.Children.ForEach(
+                    n => GenerateRiverNodeHeightsRecursive((DirectedNode)n, newHeight));
+            }
         }
     }
 }
