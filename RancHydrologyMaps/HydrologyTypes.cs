@@ -400,8 +400,10 @@ public struct HydrologyParameters
     public double InterNodeDistVar = 4;
     public int NodeExpansionMaxTries = 3;
     public float NodeExpansionMinHeight = 0.051f;
+    public float NodeExpansionMaxHeight = 0.7f; // only relevant when doing river-on-map method (not map generated from river graph)
     public double MinAngleBetweenBranches = 60;
     public float BeachWidth = 5;
+    public float MinLandHeight = 0.25f; // When generating the noise heightmap terrain, this is the minimum height that non-beach land pixels can have
     public float BaseRiverWidth = 0.6f; // base width in pixels, is multiplied by flow
     public float RiverCarveDepth = 0.35f;
     public float RiverCarveBankSlope = 0.1f; // determines how sharply the banks of rivers slope

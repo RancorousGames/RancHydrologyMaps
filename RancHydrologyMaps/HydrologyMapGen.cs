@@ -49,7 +49,7 @@ public class HydrologyMapGen
         
         // Now generate a more realistic noise-based island heightmap, we use borderGraphNodeKdTree to slope terrain at border for beach-like structure
         HydrologyTerrainFormer.InterpolateHeightMapSimple(heightmap, borderGraphNodeKdTree, width, 10,
-            5f);
+            _parameters.MinLandHeight);
         
         if (riverMouthCandidates.Count == 0)
         {

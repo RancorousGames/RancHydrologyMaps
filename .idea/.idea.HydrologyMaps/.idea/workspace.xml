@@ -7,19 +7,9 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="4d10c22e-8a6a-409b-b73e-b75eb5aa558b" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/.idea/.idea.HydrologyMaps/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/.idea.HydrologyMaps/.idea/.gitignore" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/.idea.HydrologyMaps/.idea/encodings.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/.idea.HydrologyMaps/.idea/indexLayout.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/.idea.HydrologyMaps/.idea/vcs.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/HydrologyMaps.sln" beforeDir="false" afterPath="$PROJECT_DIR$/RancHydrologyMaps.sln" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/HydrologyMaps/HydrologyRenderer.cs" beforeDir="false" afterPath="$PROJECT_DIR$/HydrologyMaps/HydrologyRenderer.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/HydrologyMaps/Program.cs" beforeDir="false" afterPath="$PROJECT_DIR$/HydrologyMaps/Program.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/RancHydrologyMaps/HeightmapCleaner.cs" beforeDir="false" afterPath="$PROJECT_DIR$/RancHydrologyMaps/HeightmapCleaner.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/RancHydrologyMaps/HydrologyMapGen.cs" beforeDir="false" afterPath="$PROJECT_DIR$/RancHydrologyMaps/HydrologyMapGen.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/RancHydrologyMaps/HydrologyRiverGraph.cs" beforeDir="false" afterPath="$PROJECT_DIR$/RancHydrologyMaps/HydrologyRiverGraphGenerator.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/RancHydrologyMaps/HydrologyTerrainFormer.cs" beforeDir="false" afterPath="$PROJECT_DIR$/RancHydrologyMaps/HydrologyTerrainFormer.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/RancHydrologyMaps/HydrologyTypes.cs" beforeDir="false" afterPath="$PROJECT_DIR$/RancHydrologyMaps/HydrologyTypes.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/.idea.HydrologyMaps/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.idea.HydrologyMaps/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/SampleHeightmaps/Demo.png" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -154,7 +144,7 @@
       <workItem from="1680770220928" duration="27571000" />
       <workItem from="1680868399939" duration="972000" />
       <workItem from="1680869584830" duration="23979000" />
-      <workItem from="1680962761544" duration="3686000" />
+      <workItem from="1680962761544" duration="7245000" />
     </task>
     <servers />
   </component>
@@ -198,19 +188,6 @@
             </endOffsets>
           </properties>
           <option name="timeStamp" value="120" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" type="DotNet Breakpoints">
-          <url>file://$PROJECT_DIR$/RancHydrologyMaps/HydrologyRiverGraphGenerator.cs</url>
-          <line>336</line>
-          <properties documentPath="B:\GDrive\ProjectsG\Code\RiverBasedTerrain\HydrologyMaps\RancHydrologyMaps\HydrologyRiverGraph.cs" initialLine="337" containingFunctionPresentation="method 'ContinueRiver'">
-            <startOffsets>
-              <option value="12071" />
-            </startOffsets>
-            <endOffsets>
-              <option value="12237" />
-            </endOffsets>
-          </properties>
-          <option name="timeStamp" value="159" />
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>

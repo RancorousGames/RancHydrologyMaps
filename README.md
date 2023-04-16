@@ -9,7 +9,7 @@ Features
 * Implements river propagation algorithms for realistic river systems
 * Uses noise functions for natural-looking terrain
 * Optimized performance using k-d trees for efficient nearest neighbor searches
-* Flexible and modular design for easy integration into existing projects
+* Flexible and modular design for easy modification and configuration
 
 
 

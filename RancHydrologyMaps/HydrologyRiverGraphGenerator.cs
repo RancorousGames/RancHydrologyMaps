@@ -349,6 +349,7 @@ public class HydrologyRiverGraphGenerator
             float pHeight = validCoordinate ? heightmap[x, y] : 0;
             if (validCoordinate &&
                 pHeight >= _parameters.NodeExpansionMinHeight &&
+                pHeight < _parameters.NodeExpansionMaxHeight &&
                 pHeight > currentHeight - 0.06f &&
                 (pHeight > _parameters.NodeExpansionMinHeight * 3 || pHeight > currentHeight))
             {
