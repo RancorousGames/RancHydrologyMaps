@@ -2,7 +2,7 @@
 
 ![Example](SampleHeightmaps/Demo.png)
 
-RancHydrologyMaps is a C# library for generating realistic island terrain heightmaps for games and simulations using river propagation algorithms and noise functions. This library can be used to create unique and procedurally generated maps for various applications, including game development and GIS.
+RancHydrologyMaps is a C# library (eventually an unreal engine plugin) for generating realistic island terrain heightmaps for games and simulations using river propagation algorithms and noise functions. This library can be used to create unique and procedurally generated maps for various applications, including game development and GIS.
 Features
 
 * Generates randomized island terrain heightmaps
